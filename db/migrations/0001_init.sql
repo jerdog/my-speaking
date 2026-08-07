@@ -8,8 +8,12 @@ CREATE TABLE talks (
   event_date TEXT NOT NULL,
   abstract TEXT,
   video_url TEXT,
-  slides_pdf_key TEXT,
   slide_count INTEGER NOT NULL DEFAULT 0,
+  -- Bumped on every deck upload. Slides live under talks/<id>/v<version>/, so
+  -- a re-upload writes a fresh prefix and only becomes live once the version
+  -- is committed here. That keeps replacements atomic and lets the objects be
+  -- cached immutably.
+  slides_version INTEGER NOT NULL DEFAULT 0,
   sessionize_event_id TEXT,
   published INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),

@@ -28,11 +28,9 @@ export async function loader({ context, params }: Route.LoaderArgs) {
   return {
     talk,
     slideUrls: Array.from({ length: talk.slideCount }, (_, i) =>
-      slideUrl(env.SLIDES_CDN_URL, talk.id, i + 1),
+      slideUrl(env.SLIDES_CDN_URL, talk.id, talk.slidesVersion, i + 1),
     ),
-    pdfUrl: talk.slidesPdfKey
-      ? sourcePdfUrl(env.SLIDES_CDN_URL, talk.id)
-      : null,
+    pdfUrl: sourcePdfUrl(env.SLIDES_CDN_URL, talk.id, talk.slidesVersion),
   };
 }
 

@@ -25,6 +25,8 @@ function getJwks(teamDomain: string) {
  * application cannot silently expose the admin API to the internet.
  */
 export async function requireAdmin(request: Request): Promise<AdminIdentity> {
+  requireSameOrigin(request);
+
   // Access sits in front of the deployed site, so there is no JWT to verify
   // locally. `import.meta.env.DEV` is statically false in production builds,
   // so this branch is stripped from the deployed Worker.
@@ -59,6 +61,20 @@ export async function requireAdmin(request: Request): Promise<AdminIdentity> {
   }
 
   return { email };
+}
+
+/**
+ * Access authenticates with a cookie, so a form post from another site would
+ * otherwise carry full admin rights. Browsers always send `Origin` on
+ * state-changing requests, so requiring it to match blocks cross-site writes.
+ */
+function requireSameOrigin(request: Request): void {
+  if (request.method === "GET" || request.method === "HEAD") return;
+
+  const origin = request.headers.get("Origin");
+  if (origin !== new URL(request.url).origin) {
+    throw new Response("Forbidden", { status: 403 });
+  }
 }
 
 function parseCookie(header: string | null, name: string): string | null {

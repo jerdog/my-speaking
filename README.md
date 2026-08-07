@@ -121,10 +121,15 @@ These steps can't be scripted from the repo — do them once, then fill in
 ## Storage layout
 
 ```
-talks/<talkId>/source.pdf        original uploaded deck
-talks/<talkId>/slide-<n>.webp    one image per slide, 1-indexed
+talks/<talkId>/v<version>/source.pdf        original uploaded deck
+talks/<talkId>/v<version>/slide-<n>.webp    one image per slide, 1-indexed
 ```
 
-A talk stays a draft (`published = 0`, hidden from the public pages but visible
-in `/admin`) until its slides finish uploading, so an interrupted upload never
-shows up half-rendered.
+Each upload writes a new version, and the talk only points at it once every
+file has landed. That makes replacing a deck atomic — visitors never see a mix
+of the old and new one — and lets the images be cached immutably, since a given
+URL's contents never change. The previous version is deleted once the new one
+is live.
+
+A talk also stays a draft (`published = 0`, hidden from the public pages and
+from `/slides/*` but visible in `/admin`) until its first upload completes.

@@ -34,6 +34,7 @@ export default function NewTalk() {
     try {
       const { slug } = await uploadTalk(
         {
+          mode: "create",
           metadata: {
             ...values,
             sessionizeEventId: searchParams.get("sessionizeEventId") ?? "",

@@ -6,32 +6,39 @@ export interface UploadProgress {
   total: number;
 }
 
-export interface UploadTalkInput {
-  metadata: Record<string, string>;
-  pdf: File;
-  talkId?: string;
-}
+export type UploadTalkInput =
+  | { mode: "create"; metadata: Record<string, string>; pdf: File }
+  | { mode: "replace"; talkId: string; uploadVersion: number; pdf: File };
 
 export async function uploadTalk(
-  { metadata, pdf, talkId }: UploadTalkInput,
+  input: UploadTalkInput,
   onProgress: (progress: UploadProgress) => void,
 ): Promise<{ slug: string }> {
-  let id = talkId;
+  let id: string;
+  let version: number;
 
-  if (!id) {
+  if (input.mode === "create") {
     onProgress({ step: "creating", done: 0, total: 0 });
-    const created = await postJson("/api/talks", "POST", metadata);
+    const created = await postJson("/api/talks", "POST", input.metadata);
     id = created.id as string;
+    version = created.uploadVersion as number;
+  } else {
+    id = input.talkId;
+    version = input.uploadVersion;
   }
+
+  const { pdf } = input;
 
   onProgress({ step: "rendering", done: 0, total: 0 });
   const slides = await rasterizePdf(pdf, (done, total) =>
     onProgress({ step: "rendering", done, total }),
   );
 
+  // Everything lands under the new version, so the live deck is untouched
+  // until the finalize call below commits it.
   for (const slide of slides) {
     await putBinary(
-      `/api/talks/${id}/slides/${slide.pageNumber}`,
+      `/api/talks/${id}/v/${version}/slides/${slide.pageNumber}`,
       slide.blob,
       "image/webp",
     );
@@ -42,11 +49,12 @@ export async function uploadTalk(
     });
   }
 
-  await putBinary(`/api/talks/${id}/source`, pdf, "application/pdf");
+  await putBinary(`/api/talks/${id}/v/${version}/source`, pdf, "application/pdf");
 
   onProgress({ step: "finishing", done: slides.length, total: slides.length });
   const finished = await postJson(`/api/talks/${id}`, "PATCH", {
     slideCount: slides.length,
+    uploadVersion: version,
   });
 
   return { slug: finished.slug as string };

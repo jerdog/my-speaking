@@ -26,7 +26,7 @@ export async function loader({ context }: Route.LoaderArgs) {
           ...featured,
           coverUrl:
             featured.slideCount > 0
-              ? slideUrl(env.SLIDES_CDN_URL, featured.id, 1)
+              ? slideUrl(env.SLIDES_CDN_URL, featured.id, featured.slidesVersion, 1)
               : null,
         }
       : null,

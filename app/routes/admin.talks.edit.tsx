@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Form, Link, redirect } from "react-router";
+import { Form, Link, redirect, useRevalidator } from "react-router";
 
 import type { Route } from "./+types/admin.talks.edit";
 import { TalkFormFields, type TalkFormValues } from "~/components/TalkForm";
@@ -7,6 +7,7 @@ import { requireAdmin } from "~/lib/access.server";
 import { env } from "cloudflare:workers";
 import { deleteTalk, getTalkById, updateTalk } from "~/lib/db";
 import { deleteTalkObjects } from "~/lib/r2";
+import { validateTalkFields } from "~/lib/talk-input";
 import { uploadTalk, type UploadProgress } from "~/lib/upload-talk.client";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
@@ -29,25 +30,20 @@ export async function action({ request, params }: Route.ActionArgs) {
     return redirect("/admin");
   }
 
-  await updateTalk(env.DB, params.id, {
-    title: String(formData.get("title") ?? ""),
-    conferenceName: String(formData.get("conferenceName") ?? ""),
-    conferenceUrl: emptyToNull(formData.get("conferenceUrl")),
-    location: emptyToNull(formData.get("location")),
-    eventDate: String(formData.get("eventDate") ?? ""),
-    abstract: emptyToNull(formData.get("abstract")),
-    videoUrl: emptyToNull(formData.get("videoUrl")),
-  });
+  const fields = validateTalkFields(Object.fromEntries(formData));
+  if (!fields.ok) {
+    return { error: fields.error };
+  }
+
+  await updateTalk(env.DB, params.id, fields.value);
 
   return redirect("/admin");
 }
 
-function emptyToNull(value: FormDataEntryValue | null): string | null {
-  const text = String(value ?? "").trim();
-  return text === "" ? null : text;
-}
-
-export default function EditTalk({ loaderData }: Route.ComponentProps) {
+export default function EditTalk({
+  loaderData,
+  actionData,
+}: Route.ComponentProps) {
   const { talk } = loaderData;
 
   const [values, setValues] = useState<TalkFormValues>({
@@ -77,6 +73,9 @@ export default function EditTalk({ loaderData }: Route.ComponentProps) {
         {(Object.keys(values) as (keyof TalkFormValues)[]).map((key) => (
           <input key={key} type="hidden" name={key} value={values[key]} />
         ))}
+        {actionData?.error && (
+          <p className="text-sm text-red-400">{actionData.error}</p>
+        )}
         <button
           type="submit"
           className="rounded bg-white px-4 py-2 font-medium text-black hover:bg-neutral-200"
@@ -85,7 +84,11 @@ export default function EditTalk({ loaderData }: Route.ComponentProps) {
         </button>
       </Form>
 
-      <ReplaceSlides talkId={talk.id} slideCount={talk.slideCount} />
+      <ReplaceSlides
+        talkId={talk.id}
+        slideCount={talk.slideCount}
+        nextVersion={talk.slidesVersion + 1}
+      />
 
       <Form
         method="post"
@@ -110,22 +113,30 @@ export default function EditTalk({ loaderData }: Route.ComponentProps) {
 function ReplaceSlides({
   talkId,
   slideCount,
+  nextVersion,
 }: {
   talkId: string;
   slideCount: number;
+  nextVersion: number;
 }) {
   const [pdf, setPdf] = useState<File | null>(null);
   const [progress, setProgress] = useState<UploadProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const revalidator = useRevalidator();
 
   async function onReplace() {
     if (!pdf) return;
     setError(null);
     setDone(false);
     try {
-      await uploadTalk({ metadata: {}, pdf, talkId }, setProgress);
+      await uploadTalk(
+        { mode: "replace", talkId, uploadVersion: nextVersion, pdf },
+        setProgress,
+      );
       setDone(true);
+      // Refresh so a follow-up replace targets the next version, not this one.
+      revalidator.revalidate();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {

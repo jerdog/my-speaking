@@ -1,9 +1,20 @@
-export function slideKey(talkId: string, slideNumber: number): string {
-  return `talks/${talkId}/slide-${slideNumber}.webp`;
+/** Upper bound on slides per deck, shared by the upload and finalize routes. */
+export const MAX_SLIDES = 500;
+
+function versionPrefix(talkId: string, version: number): string {
+  return `talks/${talkId}/v${version}`;
 }
 
-export function sourcePdfKey(talkId: string): string {
-  return `talks/${talkId}/source.pdf`;
+export function slideKey(
+  talkId: string,
+  version: number,
+  slideNumber: number,
+): string {
+  return `${versionPrefix(talkId, version)}/slide-${slideNumber}.webp`;
+}
+
+export function sourcePdfKey(talkId: string, version: number): string {
+  return `${versionPrefix(talkId, version)}/source.pdf`;
 }
 
 /**
@@ -12,30 +23,34 @@ export function sourcePdfKey(talkId: string): string {
  * which keeps local dev and a fresh deploy working before DNS is set up.
  */
 function publicUrl(cdnBaseUrl: string, key: string): string {
-  return cdnBaseUrl ? `${cdnBaseUrl.replace(/\/$/, "")}/${key}` : `/slides/${key}`;
+  return cdnBaseUrl
+    ? `${cdnBaseUrl.replace(/\/$/, "")}/${key}`
+    : `/slides/${key}`;
 }
 
 export function slideUrl(
   cdnBaseUrl: string,
   talkId: string,
+  version: number,
   slideNumber: number,
 ): string {
-  return publicUrl(cdnBaseUrl, slideKey(talkId, slideNumber));
+  return publicUrl(cdnBaseUrl, slideKey(talkId, version, slideNumber));
 }
 
-export function sourcePdfUrl(cdnBaseUrl: string, talkId: string): string {
-  return publicUrl(cdnBaseUrl, sourcePdfKey(talkId));
-}
-
-async function listTalkKeys(
-  bucket: R2Bucket,
+export function sourcePdfUrl(
+  cdnBaseUrl: string,
   talkId: string,
-): Promise<string[]> {
+  version: number,
+): string {
+  return publicUrl(cdnBaseUrl, sourcePdfKey(talkId, version));
+}
+
+async function listKeys(bucket: R2Bucket, prefix: string): Promise<string[]> {
   const keys: string[] = [];
   let cursor: string | undefined;
 
   do {
-    const listed = await bucket.list({ prefix: `talks/${talkId}/`, cursor });
+    const listed = await bucket.list({ prefix, cursor });
     keys.push(...listed.objects.map((object) => object.key));
     cursor = listed.truncated ? listed.cursor : undefined;
   } while (cursor);
@@ -43,32 +58,33 @@ async function listTalkKeys(
   return keys;
 }
 
-/** Removes every slide image and the source PDF for a talk. */
+async function deleteKeys(bucket: R2Bucket, keys: string[]): Promise<void> {
+  // R2 accepts at most 1000 keys per delete call.
+  for (let i = 0; i < keys.length; i += 1000) {
+    await bucket.delete(keys.slice(i, i + 1000));
+  }
+}
+
+/** Removes every deck version belonging to a talk. */
 export async function deleteTalkObjects(
   bucket: R2Bucket,
   talkId: string,
 ): Promise<void> {
-  const keys = await listTalkKeys(bucket, talkId);
-  if (keys.length > 0) {
-    await bucket.delete(keys);
-  }
+  await deleteKeys(bucket, await listKeys(bucket, `talks/${talkId}/`));
 }
 
 /**
- * Drops slide images past `slideCount`, so replacing a deck with a shorter one
- * doesn't leave the trailing slides of the old deck behind in the bucket.
+ * Removes every deck version other than the one now live, cleaning up both the
+ * deck that was just replaced and any half-finished upload.
  */
-export async function deleteSlidesAfter(
+export async function deleteOtherVersions(
   bucket: R2Bucket,
   talkId: string,
-  slideCount: number,
+  liveVersion: number,
 ): Promise<void> {
-  const stale = (await listTalkKeys(bucket, talkId)).filter((key) => {
-    const match = key.match(/\/slide-(\d+)\.webp$/);
-    return match !== null && Number(match[1]) > slideCount;
-  });
-
-  if (stale.length > 0) {
-    await bucket.delete(stale);
-  }
+  const live = `${versionPrefix(talkId, liveVersion)}/`;
+  const stale = (await listKeys(bucket, `talks/${talkId}/`)).filter(
+    (key) => !key.startsWith(live),
+  );
+  await deleteKeys(bucket, stale);
 }

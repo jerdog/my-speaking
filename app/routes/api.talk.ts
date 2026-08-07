@@ -1,8 +1,9 @@
+import { env } from "cloudflare:workers";
+
 import type { Route } from "./+types/api.talk";
 import { requireAdmin } from "~/lib/access.server";
-import { env } from "cloudflare:workers";
-import { getTalkById, setTalkSlideCount } from "~/lib/db";
-import { deleteSlidesAfter, sourcePdfKey } from "~/lib/r2";
+import { commitTalkSlides, getTalkById } from "~/lib/db";
+import { deleteOtherVersions, MAX_SLIDES } from "~/lib/r2";
 
 export async function action({ request, params }: Route.ActionArgs) {
   await requireAdmin(request);
@@ -11,20 +12,34 @@ export async function action({ request, params }: Route.ActionArgs) {
     return new Response("Method Not Allowed", { status: 405 });
   }
 
-
   const talk = await getTalkById(env.DB, params.id);
   if (!talk) {
     return Response.json({ error: "Talk not found" }, { status: 404 });
   }
 
-  const body = await request.json<{ slideCount?: unknown }>();
+  const body = await request.json<{
+    slideCount?: unknown;
+    uploadVersion?: unknown;
+  }>();
+
   const slideCount = Number(body.slideCount);
-  if (!Number.isInteger(slideCount) || slideCount < 1) {
+  if (
+    !Number.isInteger(slideCount) ||
+    slideCount < 1 ||
+    slideCount > MAX_SLIDES
+  ) {
     return Response.json({ error: "Invalid slideCount" }, { status: 400 });
   }
 
-  await setTalkSlideCount(env.DB, talk.id, slideCount, sourcePdfKey(talk.id));
-  await deleteSlidesAfter(env.SLIDES_BUCKET, talk.id, slideCount);
+  const uploadVersion = Number(body.uploadVersion);
+  if (!Number.isInteger(uploadVersion) || uploadVersion <= talk.slidesVersion) {
+    return Response.json({ error: "Invalid upload version" }, { status: 400 });
+  }
+
+  // Publishing the new version is the single point at which the deck changes;
+  // only once that has landed is the previous one safe to remove.
+  await commitTalkSlides(env.DB, talk.id, slideCount, uploadVersion);
+  await deleteOtherVersions(env.SLIDES_BUCKET, talk.id, uploadVersion);
 
   return Response.json({ ok: true, slug: talk.slug });
 }

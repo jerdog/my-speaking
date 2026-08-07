@@ -8,8 +8,8 @@ export interface Talk {
   eventDate: string;
   abstract: string | null;
   videoUrl: string | null;
-  slidesPdfKey: string | null;
   slideCount: number;
+  slidesVersion: number;
   sessionizeEventId: string | null;
   published: boolean;
   createdAt: string;
@@ -26,8 +26,8 @@ interface TalkRow {
   event_date: string;
   abstract: string | null;
   video_url: string | null;
-  slides_pdf_key: string | null;
   slide_count: number;
+  slides_version: number;
   sessionize_event_id: string | null;
   published: number;
   created_at: string;
@@ -45,8 +45,8 @@ function fromRow(row: TalkRow): Talk {
     eventDate: row.event_date,
     abstract: row.abstract,
     videoUrl: row.video_url,
-    slidesPdfKey: row.slides_pdf_key,
     slideCount: row.slide_count,
+    slidesVersion: row.slides_version,
     sessionizeEventId: row.sessionize_event_id,
     published: row.published === 1,
     createdAt: row.created_at,
@@ -168,19 +168,20 @@ export async function updateTalk(
     .run();
 }
 
-export async function setTalkSlideCount(
+/** Publishes an uploaded deck by pointing the talk at its new version. */
+export async function commitTalkSlides(
   db: D1Database,
   id: string,
   slideCount: number,
-  slidesPdfKey: string,
+  slidesVersion: number,
 ): Promise<void> {
   await db
     .prepare(
       `UPDATE talks
-       SET slide_count = ?2, slides_pdf_key = ?3, published = 1, updated_at = datetime('now')
+       SET slide_count = ?2, slides_version = ?3, published = 1, updated_at = datetime('now')
        WHERE id = ?1`,
     )
-    .bind(id, slideCount, slidesPdfKey)
+    .bind(id, slideCount, slidesVersion)
     .run();
 }
 
