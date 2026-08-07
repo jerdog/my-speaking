@@ -1,0 +1,86 @@
+import { useCallback, useEffect, useState } from "react";
+
+interface SlideViewerProps {
+  slideUrls: string[];
+  title: string;
+}
+
+export function SlideViewer({ slideUrls, title }: SlideViewerProps) {
+  const [index, setIndex] = useState(0);
+  const count = slideUrls.length;
+
+  const goTo = useCallback(
+    (next: number) => {
+      if (count === 0) return;
+      setIndex(((next % count) + count) % count);
+    },
+    [count],
+  );
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "ArrowRight") goTo(index + 1);
+      if (event.key === "ArrowLeft") goTo(index - 1);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [goTo, index]);
+
+  if (count === 0) {
+    return (
+      <div className="flex aspect-video items-center justify-center rounded-lg bg-neutral-900 text-neutral-500">
+        No slides uploaded yet.
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="relative aspect-video overflow-hidden rounded-lg bg-neutral-900">
+        <img
+          src={slideUrls[index]}
+          alt={`${title} — slide ${index + 1} of ${count}`}
+          className="h-full w-full object-contain"
+        />
+        {count > 1 && (
+          <>
+            <button
+              type="button"
+              aria-label="Previous slide"
+              onClick={() => goTo(index - 1)}
+              className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 px-3 py-2 text-white hover:bg-black/70"
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              aria-label="Next slide"
+              onClick={() => goTo(index + 1)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 px-3 py-2 text-white hover:bg-black/70"
+            >
+              ›
+            </button>
+          </>
+        )}
+      </div>
+      <div className="mt-3 flex items-center justify-between text-sm text-neutral-400">
+        <span>
+          Slide {index + 1} of {count}
+        </span>
+        <div className="flex gap-1 overflow-x-auto">
+          {slideUrls.map((url, i) => (
+            <button
+              key={url}
+              type="button"
+              aria-label={`Go to slide ${i + 1}`}
+              onClick={() => goTo(i)}
+              className={`h-1.5 w-4 rounded-full transition-colors ${
+                i === index ? "bg-white" : "bg-neutral-700 hover:bg-neutral-500"
+              }`}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
