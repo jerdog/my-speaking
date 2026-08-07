@@ -10,6 +10,10 @@ import {
 import type { Route } from "./+types/root";
 import "./app.css";
 
+export function links(): Route.LinkDescriptors {
+  return [{ rel: "icon", href: "/favicon.svg", type: "image/svg+xml" }];
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">

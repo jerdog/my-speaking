@@ -6,6 +6,7 @@ import { TalkFormFields, type TalkFormValues } from "~/components/TalkForm";
 import { requireAdmin } from "~/lib/access.server";
 import { env } from "cloudflare:workers";
 import { deleteTalk, getTalkById, updateTalk } from "~/lib/db";
+import { deleteTalkObjects } from "~/lib/r2";
 import { uploadTalk, type UploadProgress } from "~/lib/upload-talk.client";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
@@ -23,6 +24,7 @@ export async function action({ request, params }: Route.ActionArgs) {
   const formData = await request.formData();
 
   if (formData.get("intent") === "delete") {
+    await deleteTalkObjects(env.SLIDES_BUCKET, params.id);
     await deleteTalk(env.DB, params.id);
     return redirect("/admin");
   }
@@ -88,7 +90,7 @@ export default function EditTalk({ loaderData }: Route.ComponentProps) {
       <Form
         method="post"
         onSubmit={(event) => {
-          if (!confirm("Delete this talk? Slide images stay in R2.")) {
+          if (!confirm("Delete this talk and its slides? This can't be undone.")) {
             event.preventDefault();
           }
         }}
