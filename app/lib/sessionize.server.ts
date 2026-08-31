@@ -53,6 +53,24 @@ export async function fetchSessionizeEvents(
   });
 }
 
+/**
+ * Turns a Sessionize event into a draft talk. Sessionize can't say which of
+ * your sessions you gave at a given event, so the conference name stands in as
+ * a provisional title until you edit it.
+ */
+export function draftTalkFromEvent(event: SessionizeEvent) {
+  return {
+    title: event.name,
+    conferenceName: event.name,
+    eventDate: event.startDate,
+    location: event.location,
+    conferenceUrl: event.website,
+    abstract: null,
+    videoUrl: null,
+    sessionizeEventId: event.id,
+  };
+}
+
 export interface SessionizeSplit {
   upcoming: SessionizeEvent[];
   needsSlides: SessionizeEvent[];

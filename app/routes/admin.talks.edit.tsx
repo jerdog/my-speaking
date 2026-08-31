@@ -5,7 +5,13 @@ import type { Route } from "./+types/admin.talks.edit";
 import { TalkFormFields, type TalkFormValues } from "~/components/TalkForm";
 import { requireAdmin } from "~/lib/access.server";
 import { env } from "cloudflare:workers";
-import { deleteTalk, getTalkById, updateTalk } from "~/lib/db";
+import {
+  deleteTalk,
+  getTalkById,
+  slugify,
+  uniqueSlug,
+  updateTalk,
+} from "~/lib/db";
 import { deleteTalkObjects } from "~/lib/r2";
 import { validateTalkFields } from "~/lib/talk-input";
 import { uploadTalk, type UploadProgress } from "~/lib/upload-talk.client";
@@ -35,7 +41,21 @@ export async function action({ request, params }: Route.ActionArgs) {
     return { error: fields.error };
   }
 
-  await updateTalk(env.DB, params.id, fields.value);
+  const talk = await getTalkById(env.DB, params.id);
+  if (!talk) throw new Response("Not Found", { status: 404 });
+
+  // An imported draft starts with a placeholder title, so its slug is a
+  // placeholder too. Published talks keep theirs so existing links don't break.
+  const slug =
+    !talk.published && fields.value.title !== talk.title
+      ? await uniqueSlug(
+          env.DB,
+          slugify(fields.value.title) || talk.id,
+          talk.id,
+        )
+      : undefined;
+
+  await updateTalk(env.DB, params.id, { ...fields.value, slug });
 
   return redirect("/admin");
 }

@@ -189,6 +189,20 @@ export async function deleteTalk(db: D1Database, id: string): Promise<void> {
   await db.prepare("DELETE FROM talks WHERE id = ?1").bind(id).run();
 }
 
+/** Finds a free slug, appending -2, -3, … when the base is already taken. */
+export async function uniqueSlug(
+  db: D1Database,
+  base: string,
+  ignoreTalkId?: string,
+): Promise<string> {
+  let candidate = base;
+  for (let n = 2; ; n++) {
+    const existing = await getTalkBySlug(db, candidate);
+    if (!existing || existing.id === ignoreTalkId) return candidate;
+    candidate = `${base}-${n}`;
+  }
+}
+
 export function slugify(title: string): string {
   return title
     .toLowerCase()
