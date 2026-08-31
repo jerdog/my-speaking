@@ -1,8 +1,13 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 
+import { BusyButton } from "~/components/Busy";
 import { TalkFormFields, type TalkFormValues } from "~/components/TalkForm";
-import { uploadTalk, type UploadProgress } from "~/lib/upload-talk.client";
+import {
+  describeProgress,
+  uploadTalk,
+  type UploadProgress,
+} from "~/lib/upload-talk.client";
 
 export default function NewTalk() {
   const [searchParams] = useSearchParams();
@@ -77,33 +82,18 @@ export default function NewTalk() {
       {error && <p className="text-sm text-red-400">{error}</p>}
 
       {progress && (
-        <p className="text-sm text-neutral-400">{describe(progress)}</p>
+        <p className="text-sm text-neutral-400">{describeProgress(progress)}</p>
       )}
 
-      <button
+      <BusyButton
         type="submit"
-        disabled={busy}
-        className="rounded bg-white px-4 py-2 font-medium text-black hover:bg-neutral-200 disabled:opacity-50"
+        busy={busy}
+        busyLabel={progress ? describeProgress(progress) : "Working…"}
+        className="rounded bg-white px-4 py-2 font-medium text-black hover:bg-neutral-200"
       >
-        {busy ? "Working…" : "Upload talk"}
-      </button>
+        Upload talk
+      </BusyButton>
     </form>
   );
 }
 
-function describe(progress: UploadProgress): string {
-  switch (progress.step) {
-    case "creating":
-      return "Creating talk…";
-    case "fetching":
-      return "Fetching the deck…";
-    case "rendering":
-      return progress.total
-        ? `Rendering slide ${progress.done} of ${progress.total}…`
-        : "Reading PDF…";
-    case "uploading":
-      return `Uploading slide ${progress.done} of ${progress.total}…`;
-    case "finishing":
-      return "Finishing up…";
-  }
-}

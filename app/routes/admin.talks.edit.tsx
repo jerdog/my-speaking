@@ -1,7 +1,14 @@
 import { useState } from "react";
-import { Form, Link, redirect, useRevalidator } from "react-router";
+import {
+  Form,
+  Link,
+  redirect,
+  useNavigation,
+  useRevalidator,
+} from "react-router";
 
 import type { Route } from "./+types/admin.talks.edit";
+import { BusyButton } from "~/components/Busy";
 import { TalkFormFields, type TalkFormValues } from "~/components/TalkForm";
 import { requireAdmin } from "~/lib/access.server";
 import { env } from "cloudflare:workers";
@@ -15,6 +22,7 @@ import {
 import { deleteTalkObjects } from "~/lib/r2";
 import { validateTalkFields } from "~/lib/talk-input";
 import {
+  describeProgress,
   importDeckFromUrl,
   uploadTalk,
   type UploadProgress,
@@ -69,6 +77,9 @@ export default function EditTalk({
   actionData,
 }: Route.ComponentProps) {
   const { talk } = loaderData;
+  const navigation = useNavigation();
+  const pendingIntent = navigation.formData?.get("intent");
+  const saving = navigation.state !== "idle" && pendingIntent !== "delete";
 
   const [values, setValues] = useState<TalkFormValues>({
     title: talk.title,
@@ -100,12 +111,14 @@ export default function EditTalk({
         {actionData?.error && (
           <p className="text-sm text-red-400">{actionData.error}</p>
         )}
-        <button
+        <BusyButton
           type="submit"
+          busy={saving}
+          busyLabel="Saving…"
           className="rounded bg-white px-4 py-2 font-medium text-black hover:bg-neutral-200"
         >
           Save changes
-        </button>
+        </BusyButton>
       </Form>
 
       <ReplaceSlides
@@ -123,12 +136,14 @@ export default function EditTalk({
         }}
       >
         <input type="hidden" name="intent" value="delete" />
-        <button
+        <BusyButton
           type="submit"
+          busy={pendingIntent === "delete"}
+          busyLabel="Deleting…"
           className="text-sm text-red-400 underline hover:text-red-300"
         >
           Delete talk
-        </button>
+        </BusyButton>
       </Form>
     </div>
   );
@@ -148,11 +163,13 @@ function ReplaceSlides({
   const [progress, setProgress] = useState<UploadProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [busy, setBusy] = useState(false);
   const revalidator = useRevalidator();
 
   async function run(work: () => Promise<unknown>) {
     setError(null);
     setDone(false);
+    setBusy(true);
     try {
       await work();
       setDone(true);
@@ -162,6 +179,7 @@ function ReplaceSlides({
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setProgress(null);
+      setBusy(false);
     }
   }
 
@@ -192,18 +210,20 @@ function ReplaceSlides({
       <input
         type="file"
         accept="application/pdf"
-        disabled={progress !== null}
+        disabled={busy}
         onChange={(e) => setPdf(e.target.files?.[0] ?? null)}
         className="w-full text-sm text-neutral-300 file:mr-3 file:rounded file:border-0 file:bg-neutral-800 file:px-3 file:py-2 file:text-neutral-100"
       />
-      <button
+      <BusyButton
         type="button"
         onClick={onReplace}
-        disabled={!pdf || progress !== null}
-        className="mt-3 rounded border border-neutral-700 px-3 py-1.5 text-sm hover:border-neutral-500 disabled:opacity-50"
+        busy={busy && pdf !== null}
+        busyLabel="Working…"
+        disabled={!pdf}
+        className="mt-3 rounded border border-neutral-700 px-3 py-1.5 text-sm hover:border-neutral-500"
       >
         Replace slides
-      </button>
+      </BusyButton>
 
       <div className="mt-6 border-t border-neutral-900 pt-4">
         <label className="block">
@@ -215,24 +235,26 @@ function ReplaceSlides({
             inputMode="url"
             placeholder="https://on.notist.cloud/pdf/deck-….pdf"
             value={deckUrl}
-            disabled={progress !== null}
+            disabled={busy}
             onChange={(e) => setDeckUrl(e.target.value)}
             className="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 outline-none focus:border-neutral-500 disabled:opacity-50"
           />
         </label>
-        <button
+        <BusyButton
           type="button"
           onClick={onImportUrl}
-          disabled={!deckUrl.trim() || progress !== null}
+          busy={busy && deckUrl.trim() !== ""}
+          busyLabel="Working…"
+          disabled={!deckUrl.trim()}
           className="mt-3 rounded border border-neutral-700 px-3 py-1.5 text-sm hover:border-neutral-500 disabled:opacity-50"
         >
           Import deck
-        </button>
+        </BusyButton>
       </div>
 
-      {progress && (
+      {busy && (
         <p className="mt-2 text-sm text-neutral-400">
-          {progress.step} {progress.done}/{progress.total}
+          {progress ? describeProgress(progress) : "Starting…"}
         </p>
       )}
       {done && <p className="mt-2 text-sm text-green-400">Slides updated.</p>}

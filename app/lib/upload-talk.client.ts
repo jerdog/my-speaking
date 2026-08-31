@@ -6,6 +6,24 @@ export interface UploadProgress {
   total: number;
 }
 
+/** Turns progress into something worth reading while you wait. */
+export function describeProgress(progress: UploadProgress): string {
+  switch (progress.step) {
+    case "creating":
+      return "Creating talk…";
+    case "fetching":
+      return "Fetching the deck…";
+    case "rendering":
+      return progress.total
+        ? `Rendering slide ${progress.done} of ${progress.total}…`
+        : "Reading the PDF…";
+    case "uploading":
+      return `Uploading slide ${progress.done} of ${progress.total}…`;
+    case "finishing":
+      return "Finishing up…";
+  }
+}
+
 export type UploadTalkInput =
   | { mode: "create"; metadata: Record<string, string>; pdf: File }
   | { mode: "replace"; talkId: string; uploadVersion: number; pdf: File };

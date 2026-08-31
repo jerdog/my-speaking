@@ -5,6 +5,8 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useNavigation,
+  useRevalidator,
 } from "react-router";
 
 import type { Route } from "./+types/root";
@@ -32,8 +34,36 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * A page-wide hint that something is in flight. Several actions here talk to
+ * Noti.st or Sessionize and can take seconds, which otherwise looks like a
+ * hang.
+ */
+function NavigationProgress() {
+  const navigation = useNavigation();
+  const revalidator = useRevalidator();
+  const busy = navigation.state !== "idle" || revalidator.state !== "idle";
+
+  if (!busy) return null;
+
+  return (
+    <div
+      role="progressbar"
+      aria-label="Loading"
+      className="fixed inset-x-0 top-0 z-50 h-0.5 overflow-hidden bg-neutral-800"
+    >
+      <div className="progress-sweep h-full w-1/4 bg-white" />
+    </div>
+  );
+}
+
 export default function App() {
-  return <Outlet />;
+  return (
+    <>
+      <NavigationProgress />
+      <Outlet />
+    </>
+  );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

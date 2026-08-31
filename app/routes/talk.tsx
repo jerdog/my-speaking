@@ -1,6 +1,7 @@
-import { Form, Link } from "react-router";
+import { Form, Link, useNavigation } from "react-router";
 
 import type { Route } from "./+types/talk";
+import { BusyButton } from "~/components/Busy";
 import { SlideViewer } from "~/components/SlideViewer";
 import { env } from "cloudflare:workers";
 import { optionalAdmin, requireAdmin } from "~/lib/access.server";
@@ -64,6 +65,8 @@ export default function TalkPage({
   actionData,
 }: Route.ComponentProps) {
   const { talk, isAdmin, slideUrls, pdfUrl } = loaderData;
+  const navigation = useNavigation();
+  const pendingIntent = navigation.formData?.get("intent");
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-12">
@@ -91,13 +94,15 @@ export default function TalkPage({
             </Link>
             <Form method="post">
               <input type="hidden" name="intent" value="publish" />
-              <button
+              <BusyButton
                 type="submit"
+                busy={pendingIntent === "publish"}
+                busyLabel="Publishing…"
                 disabled={talk.slideCount === 0}
-                className="rounded bg-white px-3 py-1.5 text-sm font-medium text-black hover:bg-neutral-200 disabled:opacity-50"
+                className="rounded bg-white px-3 py-1.5 text-sm font-medium text-black hover:bg-neutral-200"
               >
                 Publish
-              </button>
+              </BusyButton>
             </Form>
           </div>
         </div>
@@ -115,12 +120,14 @@ export default function TalkPage({
             </Link>
             <Form method="post">
               <input type="hidden" name="intent" value="unpublish" />
-              <button
+              <BusyButton
                 type="submit"
+                busy={pendingIntent === "unpublish"}
+                busyLabel="Unpublishing…"
                 className="text-neutral-400 underline hover:text-neutral-200"
               >
                 Unpublish
-              </button>
+              </BusyButton>
             </Form>
           </div>
         </div>

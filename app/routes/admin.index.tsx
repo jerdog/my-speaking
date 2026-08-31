@@ -1,5 +1,13 @@
 import { useState } from "react";
-import { Form, Link, redirect, useRevalidator } from "react-router";
+import {
+  Form,
+  Link,
+  redirect,
+  useNavigation,
+  useRevalidator,
+} from "react-router";
+
+import { BusyButton } from "~/components/Busy";
 
 import type { Route } from "./+types/admin.index";
 import { requireAdmin } from "~/lib/access.server";
@@ -246,8 +254,18 @@ function NotistPanel({
   } | null;
 }) {
   const revalidator = useRevalidator();
+  const navigation = useNavigation();
   const found = notist && !notist.error ? notist.found : null;
   const url = notist?.url ?? "";
+
+  // The lookup is a GET navigation towards a ?notist= URL. An import is a POST
+  // that redirects to the same place, so the method is what separates them.
+  const method = navigation.formMethod?.toUpperCase();
+  const lookingUp =
+    navigation.state !== "idle" &&
+    (method === undefined || method === "GET") &&
+    (navigation.location?.search.includes("notist=") ?? false);
+  const importingId = navigation.formData?.get("notistId");
 
   // Only talks with a date can be imported, so don't offer a count that
   // promises more than the import will actually create.
@@ -275,13 +293,22 @@ function NotistPanel({
           placeholder="https://noti.st/yourname"
           className="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 outline-none focus:border-neutral-500"
         />
-        <button
+        <BusyButton
           type="submit"
+          busy={lookingUp}
+          busyLabel="Looking up…"
           className="shrink-0 rounded border border-neutral-700 px-3 py-2 text-sm hover:border-neutral-500"
         >
           Look up
-        </button>
+        </BusyButton>
       </Form>
+
+      {lookingUp && (
+        <p className="mt-3 text-sm text-neutral-400">
+          Reading your Noti.st profile. A large one takes a moment — each
+          presentation's event and deck are read from its own page.
+        </p>
+      )}
 
       {notist?.error && (
         <p className="mt-3 text-sm text-red-400">{notist.error}</p>
@@ -308,12 +335,14 @@ function NotistPanel({
                 <input type="hidden" name="intent" value="notist-import" />
                 <input type="hidden" name="notistUrl" value={url} />
                 <input type="hidden" name="notistId" value="all" />
-                <button
+                <BusyButton
                   type="submit"
+                  busy={importingId === "all"}
+                  busyLabel={`Importing ${importable.length}…`}
                   className="rounded bg-white px-3 py-1.5 text-sm font-medium text-black hover:bg-neutral-200"
                 >
                   Import all ({importable.length})
-                </button>
+                </BusyButton>
               </Form>
             )}
           </div>
@@ -355,12 +384,14 @@ function NotistPanel({
                     <input type="hidden" name="intent" value="notist-import" />
                     <input type="hidden" name="notistUrl" value={url} />
                     <input type="hidden" name="notistId" value={p.id} />
-                    <button
+                    <BusyButton
                       type="submit"
+                      busy={importingId === p.id}
+                      busyLabel="Importing…"
                       className="rounded border border-neutral-700 px-2 py-1 text-xs hover:border-neutral-500"
                     >
                       Import
-                    </button>
+                    </BusyButton>
                   </Form>
                 )}
               </li>
@@ -450,6 +481,8 @@ export default function AdminDashboard({
   actionData,
 }: Route.ComponentProps) {
   const { talks, sessionize, pendingDecks, notist, lastImport } = loaderData;
+  const navigation = useNavigation();
+  const importingEventId = navigation.formData?.get("eventId");
 
   return (
     <div className="space-y-12">
@@ -497,12 +530,14 @@ export default function AdminDashboard({
             </h2>
             <Form method="post">
               <input type="hidden" name="eventId" value="all" />
-              <button
+              <BusyButton
                 type="submit"
+                busy={importingEventId === "all"}
+                busyLabel="Importing…"
                 className="rounded border border-neutral-700 px-3 py-1.5 text-sm hover:border-neutral-500"
               >
                 Import all ({sessionize.needsSlides.length})
-              </button>
+              </BusyButton>
             </Form>
           </div>
           <p className="mb-4 text-sm text-neutral-500">
@@ -526,12 +561,14 @@ export default function AdminDashboard({
                 <div className="flex shrink-0 gap-2">
                   <Form method="post">
                     <input type="hidden" name="eventId" value={event.id} />
-                    <button
+                    <BusyButton
                       type="submit"
+                      busy={importingEventId === event.id}
+                      busyLabel="Importing…"
                       className="rounded border border-neutral-700 px-3 py-1.5 text-sm hover:border-neutral-500"
                     >
                       Import
-                    </button>
+                    </BusyButton>
                   </Form>
                   <Link
                     to={`/admin/talks/new?${newTalkParams(event)}`}
