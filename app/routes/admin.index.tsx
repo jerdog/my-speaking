@@ -273,11 +273,11 @@ function NotistPanel({
   const undated = found?.filter((p) => !p.importedSlug && !p.eventDate) ?? [];
 
   return (
-    <section className="rounded-lg border border-neutral-800 p-4">
-      <h2 className="mb-1 text-sm font-semibold text-neutral-300">
+    <section className="rounded-lg border border-[var(--border)] p-4">
+      <h2 className="mb-1 text-sm font-semibold text-[var(--fg)]">
         Import from Noti.st
       </h2>
-      <p className="mb-4 text-sm text-neutral-500">
+      <p className="mb-4 text-sm text-[var(--muted)]">
         Paste your Noti.st profile URL to list everything on it, or a single
         presentation URL. Importing brings across the title, abstract,
         conference, date and location, and remembers where the deck lives. The
@@ -291,33 +291,33 @@ function NotistPanel({
           name="notist"
           defaultValue={url}
           placeholder="https://noti.st/yourname"
-          className="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 outline-none focus:border-neutral-500"
+          className="w-full rounded border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[var(--fg)] outline-none focus:border-[var(--muted)]"
         />
         <BusyButton
           type="submit"
           busy={lookingUp}
           busyLabel="Looking up…"
-          className="shrink-0 rounded border border-neutral-700 px-3 py-2 text-sm hover:border-neutral-500"
+          className="shrink-0 rounded border border-[var(--border)] px-3 py-2 text-sm hover:border-[var(--muted)]"
         >
           Look up
         </BusyButton>
       </Form>
 
       {lookingUp && (
-        <p className="mt-3 text-sm text-neutral-400">
+        <p className="mt-3 text-sm text-[var(--muted)]">
           Reading your Noti.st profile. A large one takes a moment — each
           presentation's event and deck are read from its own page.
         </p>
       )}
 
       {notist?.error && (
-        <p className="mt-3 text-sm text-red-400">{notist.error}</p>
+        <p className="mt-3 text-sm text-red-600 dark:text-red-400">{notist.error}</p>
       )}
 
       {found && (
         <div className="mt-4">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-neutral-400">
+            <p className="text-sm text-[var(--muted)]">
               Found {found.length} presentation{found.length === 1 ? "" : "s"},{" "}
               {importable.length} ready to import
               {undated.length > 0 ? `, ${undated.length} with no date` : ""}.{" "}
@@ -325,7 +325,7 @@ function NotistPanel({
                 type="button"
                 onClick={() => revalidator.revalidate()}
                 disabled={revalidator.state !== "idle"}
-                className="underline hover:text-neutral-200 disabled:opacity-50"
+                className="underline hover:text-[var(--fg)] disabled:opacity-50"
               >
                 {revalidator.state === "idle" ? "Refresh" : "Refreshing…"}
               </button>
@@ -339,14 +339,14 @@ function NotistPanel({
                   type="submit"
                   busy={importingId === "all"}
                   busyLabel={`Importing ${importable.length}…`}
-                  className="rounded bg-white px-3 py-1.5 text-sm font-medium text-black hover:bg-neutral-200"
+                  className="rounded bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)] hover:opacity-90"
                 >
                   Import all ({importable.length})
                 </BusyButton>
               </Form>
             )}
           </div>
-          <ul className="max-h-80 divide-y divide-neutral-800 overflow-y-auto border-y border-neutral-800">
+          <ul className="max-h-80 divide-y divide-[var(--border)] overflow-y-auto border-y border-[var(--border)]">
             {found.map((p) => (
               <li
                 key={p.id}
@@ -356,7 +356,7 @@ function NotistPanel({
                   <p className="truncate">{p.title}</p>
                   {/* Imported rows aren't re-fetched from Noti.st, so showing
                       its fields here would read as missing data. */}
-                  <p className="text-xs text-neutral-500">
+                  <p className="text-xs text-[var(--muted)]">
                     {p.importedSlug ? (
                       "already imported"
                     ) : (
@@ -371,12 +371,12 @@ function NotistPanel({
                 {p.importedSlug ? (
                   <Link
                     to={`/talks/${p.importedSlug}`}
-                    className="shrink-0 text-xs text-neutral-400 underline hover:text-neutral-200"
+                    className="shrink-0 text-xs text-[var(--muted)] underline hover:text-[var(--fg)]"
                   >
                     Preview
                   </Link>
                 ) : !p.eventDate ? (
-                  <span className="shrink-0 text-xs text-neutral-600">
+                  <span className="shrink-0 text-xs text-[var(--muted)]">
                     needs a date
                   </span>
                 ) : (
@@ -388,7 +388,7 @@ function NotistPanel({
                       type="submit"
                       busy={importingId === p.id}
                       busyLabel="Importing…"
-                      className="rounded border border-neutral-700 px-2 py-1 text-xs hover:border-neutral-500"
+                      className="rounded border border-[var(--border)] px-2 py-1 text-xs hover:border-[var(--muted)]"
                     >
                       Import
                     </BusyButton>
@@ -398,7 +398,7 @@ function NotistPanel({
             ))}
           </ul>
           {found.some((p) => !p.eventDate) && (
-            <p className="mt-2 text-xs text-neutral-500">
+            <p className="mt-2 text-xs text-[var(--muted)]">
               Presentations with no event date are skipped — a talk needs a date.
             </p>
           )}
@@ -447,11 +447,11 @@ function PendingDecks({
   }
 
   return (
-    <section className="rounded-lg border border-amber-900/60 bg-amber-950/20 p-4">
-      <h2 className="mb-1 text-sm font-semibold text-amber-400">
+    <section className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
+      <h2 className="mb-1 text-sm font-semibold text-amber-600 dark:text-amber-400">
         {pending.length} deck{pending.length === 1 ? "" : "s"} ready to render
       </h2>
-      <p className="mb-3 text-sm text-neutral-400">
+      <p className="mb-3 text-sm text-[var(--muted)]">
         Imported talks whose slides haven't been built yet. Rendering happens in
         this browser, so leave the tab open — each deck is fetched, converted to
         images and published as it finishes.
@@ -460,13 +460,13 @@ function PendingDecks({
         type="button"
         onClick={renderAll}
         disabled={running}
-        className="rounded bg-white px-3 py-1.5 text-sm font-medium text-black hover:bg-neutral-200 disabled:opacity-50"
+        className="rounded bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)] hover:opacity-90 disabled:opacity-50"
       >
         {running ? "Rendering…" : "Render all decks"}
       </button>
-      {status && <p className="mt-2 text-sm text-neutral-400">{status}</p>}
+      {status && <p className="mt-2 text-sm text-[var(--muted)]">{status}</p>}
       {failures.length > 0 && (
-        <ul className="mt-2 space-y-1 text-sm text-red-400">
+        <ul className="mt-2 space-y-1 text-sm text-red-600 dark:text-red-400">
           {failures.map((f) => (
             <li key={f}>{f}</li>
           ))}
@@ -487,20 +487,20 @@ export default function AdminDashboard({
   return (
     <div className="space-y-12">
       {actionData?.error && (
-        <p className="text-sm text-red-400">Import failed: {actionData.error}</p>
+        <p className="text-sm text-red-600 dark:text-red-400">Import failed: {actionData.error}</p>
       )}
       {actionData?.imported !== undefined && !actionData.error && (
-        <p className="text-sm text-green-400">
+        <p className="text-sm text-green-600 dark:text-green-400">
           Imported {actionData.imported} talk
           {actionData.imported === 1 ? "" : "s"} as drafts.
         </p>
       )}
       {lastImport && (
-        <p className="text-sm text-green-400">
+        <p className="text-sm text-green-600 dark:text-green-400">
           Imported {lastImport.imported} talk
           {lastImport.imported === 1 ? "" : "s"} as drafts.
           {lastImport.skippedNoDate ? (
-            <span className="text-amber-400">
+            <span className="text-amber-600 dark:text-amber-400">
               {" "}
               Skipped {lastImport.skippedNoDate} with no event date.
             </span>
@@ -516,7 +516,7 @@ export default function AdminDashboard({
         <h1 className="text-2xl font-semibold">Talks</h1>
         <Link
           to="/admin/talks/new"
-          className="rounded bg-white px-3 py-1.5 text-sm font-medium text-black hover:bg-neutral-200"
+          className="rounded bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)] hover:opacity-90"
         >
           Add talk
         </Link>
@@ -525,7 +525,7 @@ export default function AdminDashboard({
       {sessionize.needsSlides.length > 0 && (
         <section>
           <div className="mb-1 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-amber-400">
+            <h2 className="text-sm font-semibold text-amber-600 dark:text-amber-400">
               Needs slides
             </h2>
             <Form method="post">
@@ -534,18 +534,18 @@ export default function AdminDashboard({
                 type="submit"
                 busy={importingEventId === "all"}
                 busyLabel="Importing…"
-                className="rounded border border-neutral-700 px-3 py-1.5 text-sm hover:border-neutral-500"
+                className="rounded border border-[var(--border)] px-3 py-1.5 text-sm hover:border-[var(--muted)]"
               >
                 Import all ({sessionize.needsSlides.length})
               </BusyButton>
             </Form>
           </div>
-          <p className="mb-4 text-sm text-neutral-500">
+          <p className="mb-4 text-sm text-[var(--muted)]">
             These events have already happened per Sessionize, but have no talk
             here yet. Importing creates a draft with the conference, date and
             location filled in — add the title, abstract and slides afterwards.
           </p>
-          <ul className="divide-y divide-neutral-800 border-y border-neutral-800">
+          <ul className="divide-y divide-[var(--border)] border-y border-[var(--border)]">
             {sessionize.needsSlides.map((event) => (
               <li
                 key={event.id}
@@ -553,7 +553,7 @@ export default function AdminDashboard({
               >
                 <div>
                   <p className="font-medium">{event.name}</p>
-                  <p className="text-sm text-neutral-500">
+                  <p className="text-sm text-[var(--muted)]">
                     {formatEventDate(event.startDate)}
                     {event.location ? ` · ${event.location}` : ""}
                   </p>
@@ -565,14 +565,14 @@ export default function AdminDashboard({
                       type="submit"
                       busy={importingEventId === event.id}
                       busyLabel="Importing…"
-                      className="rounded border border-neutral-700 px-3 py-1.5 text-sm hover:border-neutral-500"
+                      className="rounded border border-[var(--border)] px-3 py-1.5 text-sm hover:border-[var(--muted)]"
                     >
                       Import
                     </BusyButton>
                   </Form>
                   <Link
                     to={`/admin/talks/new?${newTalkParams(event)}`}
-                    className="rounded border border-neutral-700 px-3 py-1.5 text-sm hover:border-neutral-500"
+                    className="rounded border border-[var(--border)] px-3 py-1.5 text-sm hover:border-[var(--muted)]"
                   >
                     Add slides
                   </Link>
@@ -585,14 +585,14 @@ export default function AdminDashboard({
 
       {sessionize.upcoming.length > 0 && (
         <section>
-          <h2 className="mb-4 text-sm font-semibold text-neutral-400">
+          <h2 className="mb-4 text-sm font-semibold text-[var(--muted)]">
             Upcoming on Sessionize
           </h2>
-          <ul className="divide-y divide-neutral-800 border-y border-neutral-800">
+          <ul className="divide-y divide-[var(--border)] border-y border-[var(--border)]">
             {sessionize.upcoming.map((event) => (
               <li key={event.id} className="flex justify-between py-3 text-sm">
                 <span>{event.name}</span>
-                <span className="text-neutral-500">
+                <span className="text-[var(--muted)]">
                   {formatEventDate(event.startDate)}
                   {event.location ? ` · ${event.location}` : ""}
                 </span>
@@ -603,16 +603,16 @@ export default function AdminDashboard({
       )}
 
       {sessionize.error && (
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-[var(--muted)]">
           Sessionize unavailable: {sessionize.error}
         </p>
       )}
 
       <section>
         {talks.length === 0 ? (
-          <p className="text-neutral-500">No talks yet.</p>
+          <p className="text-[var(--muted)]">No talks yet.</p>
         ) : (
-          <ul className="divide-y divide-neutral-800 border-y border-neutral-800">
+          <ul className="divide-y divide-[var(--border)] border-y border-[var(--border)]">
             {talks.map((talk) => (
               <li
                 key={talk.id}
@@ -620,13 +620,13 @@ export default function AdminDashboard({
               >
                 <div>
                   <p className="font-medium">{talk.title}</p>
-                  <p className="text-sm text-neutral-500">
+                  <p className="text-sm text-[var(--muted)]">
                     {talk.conferenceName} · {formatEventDate(talk.eventDate)} ·{" "}
                     {talk.slideCount} slides
                     {talk.published ? (
                       ""
                     ) : (
-                      <span className="text-amber-400">
+                      <span className="text-amber-600 dark:text-amber-400">
                         {" · draft — needs slides"}
                       </span>
                     )}
@@ -635,13 +635,13 @@ export default function AdminDashboard({
                 <div className="flex shrink-0 items-center gap-3 text-sm">
                   <Link
                     to={`/talks/${talk.slug}`}
-                    className="text-neutral-400 underline hover:text-neutral-200"
+                    className="text-[var(--muted)] underline hover:text-[var(--fg)]"
                   >
                     {talk.published ? "View" : "Preview"}
                   </Link>
                   <Link
                     to={`/admin/talks/${talk.id}/edit`}
-                    className="text-neutral-400 underline hover:text-neutral-200"
+                    className="text-[var(--muted)] underline hover:text-[var(--fg)]"
                   >
                     Edit
                   </Link>

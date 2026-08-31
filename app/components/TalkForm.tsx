@@ -104,7 +104,7 @@ export function TalkFormFields({
 }
 
 const inputClass =
-  "w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 outline-none focus:border-neutral-500 disabled:opacity-50";
+  "w-full rounded border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[var(--fg)] outline-none focus:border-[var(--muted)] disabled:opacity-50";
 
 function Field({
   label,
@@ -117,9 +117,9 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm text-neutral-400">
+      <span className="mb-1 block text-sm text-[var(--muted)]">
         {label}
-        {required && <span className="text-neutral-600"> *</span>}
+        {required && <span className="text-[var(--muted)]"> *</span>}
       </span>
       {children}
     </label>

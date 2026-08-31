@@ -11,11 +11,11 @@ export async function loader({ request }: Route.LoaderArgs) {
 export default function AdminLayout({ loaderData }: Route.ComponentProps) {
   return (
     <div className="mx-auto max-w-4xl px-4 py-12">
-      <header className="mb-10 flex items-baseline justify-between border-b border-neutral-800 pb-4">
+      <header className="mb-10 flex items-baseline justify-between border-b border-[var(--border)] pb-4">
         <Link to="/admin" className="text-lg font-semibold">
           Admin
         </Link>
-        <span className="text-sm text-neutral-500">{loaderData.email}</span>
+        <span className="text-sm text-[var(--muted)]">{loaderData.email}</span>
       </header>
       <Outlet />
     </div>

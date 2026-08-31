@@ -62,8 +62,8 @@ export default function NewTalk() {
       <TalkFormFields values={values} onChange={setValues} disabled={busy} />
 
       <label className="block">
-        <span className="mb-1 block text-sm text-neutral-400">
-          Slides (PDF) <span className="text-neutral-600">*</span>
+        <span className="mb-1 block text-sm text-[var(--muted)]">
+          Slides (PDF) <span className="text-[var(--muted)]">*</span>
         </span>
         <input
           type="file"
@@ -71,25 +71,25 @@ export default function NewTalk() {
           required
           disabled={busy}
           onChange={(e) => setPdf(e.target.files?.[0] ?? null)}
-          className="w-full text-sm text-neutral-300 file:mr-3 file:rounded file:border-0 file:bg-neutral-800 file:px-3 file:py-2 file:text-neutral-100"
+          className="w-full text-sm text-[var(--fg)] file:mr-3 file:rounded file:border-0 file:bg-[var(--surface-strong)] file:px-3 file:py-2 file:text-[var(--fg)]"
         />
-        <span className="mt-1 block text-xs text-neutral-500">
+        <span className="mt-1 block text-xs text-[var(--muted)]">
           Export from Keynote, PowerPoint or Google Slides as PDF. Each page is
           converted to an image in your browser.
         </span>
       </label>
 
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       {progress && (
-        <p className="text-sm text-neutral-400">{describeProgress(progress)}</p>
+        <p className="text-sm text-[var(--muted)]">{describeProgress(progress)}</p>
       )}
 
       <BusyButton
         type="submit"
         busy={busy}
         busyLabel={progress ? describeProgress(progress) : "Working…"}
-        className="rounded bg-white px-4 py-2 font-medium text-black hover:bg-neutral-200"
+        className="rounded bg-[var(--accent)] px-4 py-2 font-medium text-[var(--accent-fg)] hover:opacity-90"
       >
         Upload talk
       </BusyButton>

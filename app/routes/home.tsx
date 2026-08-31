@@ -1,111 +1,253 @@
 import { Link } from "react-router";
+import { env } from "cloudflare:workers";
 
 import type { Route } from "./+types/home";
-import { env } from "cloudflare:workers";
-import { listPublishedTalks } from "~/lib/db";
+import {
+  SiteFooter,
+  SiteHeader,
+  SPEAKER_NAME,
+  SPEAKER_TAGLINE,
+} from "~/components/SiteChrome";
+import { listPublishedTalks, type Talk } from "~/lib/db";
 import { formatEventDate } from "~/lib/format";
 import { slideUrl } from "~/lib/r2";
 
 export function meta() {
   return [
-    { title: "Speaking — Jeremy Meiss" },
-    {
-      name: "description",
-      content: "Conference talks and slide decks by Jeremy Meiss.",
-    },
+    { title: `Speaking — ${SPEAKER_NAME}` },
+    { name: "description", content: SPEAKER_TAGLINE },
   ];
 }
 
-export async function loader({ context }: Route.LoaderArgs) {
+function withCover(talk: Talk) {
+  return {
+    ...talk,
+    coverUrl:
+      talk.slideCount > 0
+        ? slideUrl(env.SLIDES_CDN_URL, talk.id, talk.slidesVersion, 1)
+        : null,
+  };
+}
+
+export async function loader() {
   const talks = await listPublishedTalks(env.DB);
   const [featured, ...past] = talks;
 
   return {
-    featured: featured
-      ? {
-          ...featured,
-          coverUrl:
-            featured.slideCount > 0
-              ? slideUrl(env.SLIDES_CDN_URL, featured.id, featured.slidesVersion, 1)
-              : null,
-        }
-      : null,
-    past,
+    featured: featured ? withCover(featured) : null,
+    past: past.map(withCover),
+    stats: {
+      talks: talks.length,
+      conferences: new Set(talks.map((t) => t.conferenceName)).size,
+      // Talks come back newest first, so the last one is the earliest.
+      since: talks.at(-1)?.eventDate.slice(0, 4) ?? null,
+    },
   };
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { featured, past } = loaderData;
+  const { featured, past, stats } = loaderData;
+
+  // Past talks read best grouped by year, newest first.
+  const byYear = new Map<string, typeof past>();
+  for (const talk of past) {
+    const year = talk.eventDate.slice(0, 4);
+    byYear.set(year, [...(byYear.get(year) ?? []), talk]);
+  }
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-12">
-      <header className="mb-12">
-        <h1 className="text-4xl font-bold tracking-tight">Speaking</h1>
-        <p className="mt-2 text-neutral-400">
-          Conference talks and slide decks by Jeremy Meiss.
+    <>
+      <SiteHeader />
+      <main>
+        <Hero stats={stats} />
+
+        <div className="mx-auto max-w-5xl px-6">
+          {featured ? (
+            <section className="py-14">
+              <SectionLabel>Most recent</SectionLabel>
+              <Link
+                to={`/talks/${featured.slug}`}
+                className="card group mt-6 grid gap-0 overflow-hidden rounded-2xl sm:grid-cols-[1.1fr_1fr]"
+              >
+                <SlideThumb
+                  url={featured.coverUrl}
+                  alt={`Title slide of ${featured.title}`}
+                  className="sm:aspect-auto sm:h-full"
+                  rounded={false}
+                />
+                <div className="min-w-0 p-6 sm:p-8">
+                  <Badge>{featured.conferenceName}</Badge>
+                  <h2 className="mt-3 text-2xl font-semibold leading-snug tracking-tight underline-offset-4 group-hover:underline sm:text-3xl">
+                    {featured.title}
+                  </h2>
+                  <p className="mt-2 text-sm text-[var(--muted)]">
+                    {formatEventDate(featured.eventDate)}
+                    {featured.location ? ` · ${featured.location}` : ""}
+                  </p>
+                  {featured.abstract && (
+                    <p className="mt-4 line-clamp-4 text-[var(--muted)]">
+                      {featured.abstract}
+                    </p>
+                  )}
+                  <span className="mt-6 inline-flex items-center gap-1.5 text-sm font-medium text-[var(--brand)]">
+                    View slides
+                    <span
+                      aria-hidden="true"
+                      className="transition-transform group-hover:translate-x-0.5"
+                    >
+                      →
+                    </span>
+                  </span>
+                </div>
+              </Link>
+            </section>
+          ) : (
+            <section className="py-20">
+              <p className="text-[var(--muted)]">No talks published yet.</p>
+            </section>
+          )}
+
+          {past.length > 0 && (
+            <section className="border-t border-[var(--border)] py-14">
+              <SectionLabel>Past talks</SectionLabel>
+              <div className="mt-8 space-y-12">
+                {[...byYear.entries()].map(([year, talks]) => (
+                  <div key={year}>
+                    <h3 className="mb-5 flex items-center gap-4 text-sm font-semibold tabular-nums text-[var(--muted)]">
+                      {year}
+                      <span
+                        aria-hidden="true"
+                        className="h-px flex-1 bg-[var(--border)]"
+                      />
+                    </h3>
+                    <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                      {talks.map((talk) => (
+                        <li key={talk.id}>
+                          <Link
+                            to={`/talks/${talk.slug}`}
+                            className="card group flex h-full flex-col overflow-hidden rounded-xl"
+                          >
+                            <SlideThumb
+                              url={talk.coverUrl}
+                              alt={`Title slide of ${talk.title}`}
+                              rounded={false}
+                            />
+                            <div className="flex flex-1 flex-col p-4">
+                              <Badge>{talk.conferenceName}</Badge>
+                              <h4 className="mt-2 font-medium leading-snug underline-offset-4 group-hover:underline">
+                                {talk.title}
+                              </h4>
+                              <p className="mt-auto pt-2 text-sm text-[var(--muted)]">
+                                {formatEventDate(talk.eventDate)}
+                                {talk.location ? ` · ${talk.location}` : ""}
+                              </p>
+                            </div>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      </main>
+      <SiteFooter />
+    </>
+  );
+}
+
+function Hero({
+  stats,
+}: {
+  stats: { talks: number; conferences: number; since: string | null };
+}) {
+  return (
+    <section className="relative overflow-hidden border-b border-[var(--border)]">
+      {/* Soft brand wash behind the headline; decorative only. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 -top-40 h-80 bg-[radial-gradient(60%_100%_at_50%_100%,var(--brand-soft),transparent)]"
+      />
+      <div className="relative mx-auto max-w-5xl px-6 py-16 sm:py-24">
+        <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">
+          Speaking
+        </h1>
+        <p className="mt-4 max-w-2xl text-lg text-[var(--muted)]">
+          {SPEAKER_TAGLINE}
         </p>
-      </header>
+        {stats.talks > 0 && (
+          <dl className="mt-10 flex flex-wrap gap-x-10 gap-y-4">
+            <Stat label={stats.talks === 1 ? "Talk" : "Talks"} value={stats.talks} />
+            <Stat
+              label={stats.conferences === 1 ? "Event" : "Events"}
+              value={stats.conferences}
+            />
+            {stats.since && <Stat label="Speaking since" value={stats.since} />}
+          </dl>
+        )}
+      </div>
+    </section>
+  );
+}
 
-      {featured ? (
-        <section className="mb-16">
-          <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-neutral-500">
-            Most recent talk
-          </h2>
-          <Link
-            to={`/talks/${featured.slug}`}
-            className="group block overflow-hidden rounded-xl border border-neutral-800 transition-colors hover:border-neutral-600"
-          >
-            {featured.coverUrl && (
-              <img
-                src={featured.coverUrl}
-                alt={`Title slide for ${featured.title}`}
-                className="aspect-video w-full bg-neutral-900 object-contain"
-              />
-            )}
-            <div className="p-6">
-              <h3 className="text-2xl font-semibold group-hover:underline">
-                {featured.title}
-              </h3>
-              <p className="mt-1 text-neutral-400">
-                {featured.conferenceName} · {formatEventDate(featured.eventDate)}
-                {featured.location ? ` · ${featured.location}` : ""}
-              </p>
-              {featured.abstract && (
-                <p className="mt-3 line-clamp-3 text-neutral-300">
-                  {featured.abstract}
-                </p>
-              )}
-            </div>
-          </Link>
-        </section>
+function Stat({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div>
+      <dt className="text-xs uppercase tracking-[0.12em] text-[var(--muted)]">
+        {label}
+      </dt>
+      <dd className="mt-1 text-2xl font-semibold tabular-nums">{value}</dd>
+    </div>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--muted)]">
+      {children}
+    </h2>
+  );
+}
+
+function Badge({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-block max-w-full truncate rounded-full bg-[var(--brand-soft)] px-2.5 py-1 text-xs font-medium text-[var(--brand)]">
+      {children}
+    </span>
+  );
+}
+
+function SlideThumb({
+  url,
+  alt,
+  className = "",
+  rounded = true,
+}: {
+  url: string | null;
+  alt: string;
+  className?: string;
+  rounded?: boolean;
+}) {
+  return (
+    <div
+      className={`aspect-video min-w-0 overflow-hidden bg-[var(--surface-strong)] ${
+        rounded ? "rounded-xl border border-[var(--border)]" : ""
+      } ${className}`}
+    >
+      {url ? (
+        <img
+          src={url}
+          alt={alt}
+          loading="lazy"
+          className="size-full object-contain"
+        />
       ) : (
-        <p className="mb-16 text-neutral-500">No talks published yet.</p>
+        <div className="flex size-full items-center justify-center text-sm text-[var(--muted)]">
+          No slides
+        </div>
       )}
-
-      {past.length > 0 && (
-        <section>
-          <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-neutral-500">
-            Past talks
-          </h2>
-          <ul className="divide-y divide-neutral-800 border-y border-neutral-800">
-            {past.map((talk) => (
-              <li key={talk.id}>
-                <Link
-                  to={`/talks/${talk.slug}`}
-                  className="group flex flex-col gap-1 py-4 sm:flex-row sm:items-baseline sm:justify-between"
-                >
-                  <span className="font-medium group-hover:underline">
-                    {talk.title}
-                  </span>
-                  <span className="shrink-0 text-sm text-neutral-400">
-                    {talk.conferenceName} · {formatEventDate(talk.eventDate)}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-    </main>
+    </div>
   );
 }

@@ -2,6 +2,11 @@ import { Form, Link, useNavigation } from "react-router";
 
 import type { Route } from "./+types/talk";
 import { BusyButton } from "~/components/Busy";
+import {
+  SiteFooter,
+  SiteHeader,
+  SPEAKER_NAME,
+} from "~/components/SiteChrome";
 import { SlideViewer } from "~/components/SlideViewer";
 import { env } from "cloudflare:workers";
 import { optionalAdmin, requireAdmin } from "~/lib/access.server";
@@ -11,12 +16,23 @@ import { slideUrl, sourcePdfUrl } from "~/lib/r2";
 
 export function meta({ loaderData }: Route.MetaArgs) {
   if (!loaderData) return [{ title: "Talk not found" }];
+
+  const { talk, slideUrls } = loaderData;
+  const description = talk.abstract ?? `${talk.title} — ${talk.conferenceName}`;
+
   return [
-    { title: `${loaderData.talk.title} — Jeremy Meiss` },
-    {
-      name: "description",
-      content: loaderData.talk.abstract ?? loaderData.talk.title,
-    },
+    { title: `${talk.title} — ${SPEAKER_NAME}` },
+    { name: "description", content: description },
+    { property: "og:title", content: talk.title },
+    { property: "og:description", content: description },
+    { property: "og:type", content: "article" },
+    // The title slide makes a natural share image.
+    ...(slideUrls[0]
+      ? [
+          { property: "og:image", content: slideUrls[0] },
+          { name: "twitter:card", content: "summary_large_image" },
+        ]
+      : []),
   ];
 }
 
@@ -69,133 +85,149 @@ export default function TalkPage({
   const pendingIntent = navigation.formData?.get("intent");
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-12">
-      {isAdmin && !talk.published && (
-        <div className="mb-6 flex flex-col gap-3 rounded-lg border border-amber-900/60 bg-amber-950/20 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-amber-400">
-              Draft — only you can see this
-            </p>
-            <p className="text-sm text-neutral-400">
-              {talk.slideCount > 0
-                ? "This is exactly how it will look once published."
-                : "No slides yet — add a deck before publishing."}
-            </p>
-            {actionData?.error && (
-              <p className="mt-1 text-sm text-red-400">{actionData.error}</p>
+    <>
+      <SiteHeader />
+      <main className="mx-auto max-w-5xl px-6 pb-16">
+        {isAdmin && !talk.published && (
+          <div className="mt-6 flex flex-col gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                Draft — only you can see this
+              </p>
+              <p className="text-sm text-[var(--muted)]">
+                {talk.slideCount > 0
+                  ? "This is exactly how it will look once published."
+                  : "No slides yet — add a deck before publishing."}
+              </p>
+              {actionData?.error && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                  {actionData.error}
+                </p>
+              )}
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Link
+                to={`/admin/talks/${talk.id}/edit`}
+                className="rounded-full border border-[var(--border)] px-4 py-1.5 text-sm hover:bg-[var(--surface)]"
+              >
+                Edit
+              </Link>
+              <Form method="post">
+                <input type="hidden" name="intent" value="publish" />
+                <BusyButton
+                  type="submit"
+                  busy={pendingIntent === "publish"}
+                  busyLabel="Publishing…"
+                  disabled={talk.slideCount === 0}
+                  className="rounded-full bg-[var(--accent)] px-4 py-1.5 text-sm font-medium text-[var(--accent-fg)]"
+                >
+                  Publish
+                </BusyButton>
+              </Form>
+            </div>
+          </div>
+        )}
+
+        {isAdmin && talk.published && (
+          <div className="mt-6 flex items-center justify-between rounded-xl border border-[var(--border)] px-4 py-2 text-sm">
+            <span className="text-[var(--muted)]">Published</span>
+            <div className="flex items-center gap-4">
+              <Link
+                to={`/admin/talks/${talk.id}/edit`}
+                className="text-[var(--muted)] underline-offset-4 hover:text-[var(--fg)] hover:underline"
+              >
+                Edit
+              </Link>
+              <Form method="post">
+                <input type="hidden" name="intent" value="unpublish" />
+                <BusyButton
+                  type="submit"
+                  busy={pendingIntent === "unpublish"}
+                  busyLabel="Unpublishing…"
+                  className="text-[var(--muted)] underline-offset-4 hover:text-[var(--fg)] hover:underline"
+                >
+                  Unpublish
+                </BusyButton>
+              </Form>
+            </div>
+          </div>
+        )}
+
+        <header className="py-10 sm:py-14">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-1.5 text-sm text-[var(--muted)] transition-colors hover:text-[var(--fg)]"
+          >
+            <span aria-hidden="true">←</span> All talks
+          </Link>
+          <h1 className="mt-6 text-3xl font-bold leading-tight tracking-tight sm:text-4xl">
+            {talk.title}
+          </h1>
+          <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[var(--muted)]">
+            {talk.conferenceUrl ? (
+              <a
+                href={talk.conferenceUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-[var(--brand)] underline-offset-4 hover:underline"
+              >
+                {talk.conferenceName}
+              </a>
+            ) : (
+              <span className="font-medium text-[var(--fg)]">
+                {talk.conferenceName}
+              </span>
             )}
-          </div>
-          <div className="flex shrink-0 gap-2">
-            <Link
-              to={`/admin/talks/${talk.id}/edit`}
-              className="rounded border border-neutral-700 px-3 py-1.5 text-sm hover:border-neutral-500"
-            >
-              Edit
-            </Link>
-            <Form method="post">
-              <input type="hidden" name="intent" value="publish" />
-              <BusyButton
-                type="submit"
-                busy={pendingIntent === "publish"}
-                busyLabel="Publishing…"
-                disabled={talk.slideCount === 0}
-                className="rounded bg-white px-3 py-1.5 text-sm font-medium text-black hover:bg-neutral-200"
-              >
-                Publish
-              </BusyButton>
-            </Form>
-          </div>
-        </div>
-      )}
+            <span aria-hidden="true">·</span>
+            <time dateTime={talk.eventDate}>
+              {formatEventDate(talk.eventDate)}
+            </time>
+            {talk.location && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>{talk.location}</span>
+              </>
+            )}
+          </p>
+        </header>
 
-      {isAdmin && talk.published && (
-        <div className="mb-6 flex items-center justify-between rounded-lg border border-neutral-800 px-4 py-2 text-sm">
-          <span className="text-neutral-500">Published</span>
-          <div className="flex gap-2">
-            <Link
-              to={`/admin/talks/${talk.id}/edit`}
-              className="text-neutral-400 underline hover:text-neutral-200"
-            >
-              Edit
-            </Link>
-            <Form method="post">
-              <input type="hidden" name="intent" value="unpublish" />
-              <BusyButton
-                type="submit"
-                busy={pendingIntent === "unpublish"}
-                busyLabel="Unpublishing…"
-                className="text-neutral-400 underline hover:text-neutral-200"
-              >
-                Unpublish
-              </BusyButton>
-            </Form>
-          </div>
-        </div>
-      )}
+        <SlideViewer slideUrls={slideUrls} title={talk.title} />
 
-      <Link to="/" className="text-sm text-neutral-400 hover:text-neutral-200">
-        ← All talks
-      </Link>
-
-      <header className="mb-8 mt-4">
-        <h1 className="text-3xl font-bold tracking-tight">{talk.title}</h1>
-        <p className="mt-2 text-neutral-400">
-          {talk.conferenceUrl ? (
+        <div className="mt-6 flex flex-wrap gap-3">
+          {pdfUrl && talk.slideCount > 0 && (
             <a
-              href={talk.conferenceUrl}
-              className="underline hover:text-neutral-200"
+              href={pdfUrl}
               target="_blank"
               rel="noreferrer"
+              className="inline-flex items-center gap-2 rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-fg)] transition-opacity hover:opacity-90"
             >
-              {talk.conferenceName}
+              Download slides (PDF)
             </a>
-          ) : (
-            talk.conferenceName
-          )}{" "}
-          · {formatEventDate(talk.eventDate)}
-          {talk.location ? ` · ${talk.location}` : ""}
-        </p>
-      </header>
+          )}
+          {talk.videoUrl && (
+            <a
+              href={talk.videoUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-4 py-2 text-sm font-medium transition-colors hover:bg-[var(--surface)]"
+            >
+              Watch the recording
+            </a>
+          )}
+        </div>
 
-      <SlideViewer slideUrls={slideUrls} title={talk.title} />
-
-      {pdfUrl && (
-        <p className="mt-4">
-          <a
-            href={pdfUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="text-sm text-neutral-400 underline hover:text-neutral-200"
-          >
-            Download slides (PDF)
-          </a>
-        </p>
-      )}
-
-      {talk.abstract && (
-        <section className="mt-10">
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-neutral-500">
-            Abstract
-          </h2>
-          <p className="whitespace-pre-line text-neutral-200">{talk.abstract}</p>
-        </section>
-      )}
-
-      {talk.videoUrl && (
-        <section className="mt-10">
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-widest text-neutral-500">
-            Video
-          </h2>
-          <a
-            href={talk.videoUrl}
-            className="text-neutral-200 underline"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Watch the recording
-          </a>
-        </section>
-      )}
-    </main>
+        {talk.abstract && (
+          <section className="mt-14 max-w-2xl">
+            <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.15em] text-[var(--muted)]">
+              About this talk
+            </h2>
+            <div className="whitespace-pre-line text-lg leading-relaxed">
+              {talk.abstract}
+            </div>
+          </section>
+        )}
+      </main>
+      <SiteFooter />
+    </>
   );
 }

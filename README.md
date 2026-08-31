@@ -8,6 +8,7 @@ you upload a slide deck and have it rendered on that talk's page.
 - **Metadata**: Cloudflare D1
 - **Slides**: Cloudflare R2 (original PDF plus one WebP per slide)
 - **Admin auth**: Cloudflare Access, re-verified in the Worker
+- **Theming**: light and dark, following the OS by default with a stored override
 
 ## How slide conversion works
 
@@ -16,6 +17,14 @@ your browser at upload time. Export the deck to PDF (Keynote, PowerPoint and
 Google Slides all do this natively), pick it in the admin form, and the page
 rasterizes each page with `pdf.js` and uploads the images plus the original PDF
 to R2. No third-party conversion service is involved.
+
+## Light and dark mode
+
+Colours live as CSS custom properties in `app/app.css` — one set on `:root`,
+one on `.dark`. The header toggle writes the choice to `localStorage`, and an
+inline script in `<head>` (see `app/root.tsx`) applies the `dark` class before
+first paint so switching themes never flashes. With nothing stored the page
+follows `prefers-color-scheme`.
 
 ## Routes
 
@@ -160,6 +169,15 @@ These steps can't be scripted from the repo — do them once, then fill in
 
    The Worker verifies the Access JWT itself, so a misconfigured or deleted
    Access application fails closed instead of exposing the admin API.
+
+   Path-scoped applications only gate those paths. If the *public* pages also
+   demand a login, the cause is Access applied at a higher level than the
+   application above: check Workers & Pages → your Worker → **Access**, which
+   protects every hostname on the Worker regardless of path, and the
+   account-level "protect all Workers" setting, which acts as a fallback for
+   Workers with no application of their own. Turn the Worker-level protection
+   off, or add a Worker-level bypass policy, and the path-scoped applications
+   take over again.
 
 4. **Optional: serve slides straight from R2**
 

@@ -1,5 +1,53 @@
 @import "tailwindcss";
 
+/* Theme follows the system by default; a stored choice wins. The `dark` class
+   is set on <html> before paint (see root.tsx) so there's no flash. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --bg: #ffffff;
+  --surface: #f7f7f8;
+  --surface-strong: #efeff1;
+  --border: #e4e4e7;
+  --fg: #18181b;
+  --muted: #63636b;
+  --accent: #18181b;
+  --accent-fg: #ffffff;
+  --brand: #4f46e5;
+  --brand-soft: #eef2ff;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.05), 0 12px 32px -12px rgb(0 0 0 / 0.18);
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #09090b;
+  --surface: #131316;
+  --surface-strong: #1c1c20;
+  --border: #27272a;
+  --fg: #f4f4f5;
+  --muted: #a1a1aa;
+  --accent: #fafafa;
+  --accent-fg: #09090b;
+  --brand: #a5b4fc;
+  --brand-soft: #1e1b3a;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px -12px rgb(0 0 0 / 0.7);
+  color-scheme: dark;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .progress-sweep,
+  .spinner {
+    animation: none;
+  }
+}
+
 /* Indeterminate bar for the top-of-page navigation indicator: work here has no
    measurable progress, so it sweeps rather than fills. */
 @keyframes progress-sweep {
@@ -23,4 +71,29 @@
 
 .spinner {
   animation: spin 0.7s linear infinite;
+}
+
+/* Cards lift slightly on hover. Kept here rather than repeated across routes so
+   the home grid and the featured talk share one definition. */
+.card {
+  background-color: var(--bg);
+  border: 1px solid var(--border);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.card:hover {
+  border-color: color-mix(in oklab, var(--brand) 45%, var(--border));
+  box-shadow: var(--shadow);
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .card:hover {
+    transform: none;
+    transition: none;
+  }
 }

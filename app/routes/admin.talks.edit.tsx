@@ -97,7 +97,7 @@ export default function EditTalk({
         <h1 className="text-2xl font-semibold">Edit talk</h1>
         <Link
           to={`/talks/${talk.slug}`}
-          className="text-sm text-neutral-400 underline hover:text-neutral-200"
+          className="text-sm text-[var(--muted)] underline hover:text-[var(--fg)]"
         >
           View page
         </Link>
@@ -109,13 +109,13 @@ export default function EditTalk({
           <input key={key} type="hidden" name={key} value={values[key]} />
         ))}
         {actionData?.error && (
-          <p className="text-sm text-red-400">{actionData.error}</p>
+          <p className="text-sm text-red-600 dark:text-red-400">{actionData.error}</p>
         )}
         <BusyButton
           type="submit"
           busy={saving}
           busyLabel="Saving…"
-          className="rounded bg-white px-4 py-2 font-medium text-black hover:bg-neutral-200"
+          className="rounded bg-[var(--accent)] px-4 py-2 font-medium text-[var(--accent-fg)] hover:opacity-90"
         >
           Save changes
         </BusyButton>
@@ -140,7 +140,7 @@ export default function EditTalk({
           type="submit"
           busy={pendingIntent === "delete"}
           busyLabel="Deleting…"
-          className="text-sm text-red-400 underline hover:text-red-300"
+          className="text-sm text-red-600 dark:text-red-400 underline hover:text-red-500 dark:hover:text-red-300"
         >
           Delete talk
         </BusyButton>
@@ -201,9 +201,9 @@ function ReplaceSlides({
     );
 
   return (
-    <section className="border-t border-neutral-800 pt-8">
-      <h2 className="mb-1 text-sm font-semibold text-neutral-300">Slides</h2>
-      <p className="mb-4 text-sm text-neutral-500">
+    <section className="border-t border-[var(--border)] pt-8">
+      <h2 className="mb-1 text-sm font-semibold text-[var(--fg)]">Slides</h2>
+      <p className="mb-4 text-sm text-[var(--muted)]">
         {slideCount} slide{slideCount === 1 ? "" : "s"} uploaded. Uploading a new
         PDF replaces them.
       </p>
@@ -212,7 +212,7 @@ function ReplaceSlides({
         accept="application/pdf"
         disabled={busy}
         onChange={(e) => setPdf(e.target.files?.[0] ?? null)}
-        className="w-full text-sm text-neutral-300 file:mr-3 file:rounded file:border-0 file:bg-neutral-800 file:px-3 file:py-2 file:text-neutral-100"
+        className="w-full text-sm text-[var(--fg)] file:mr-3 file:rounded file:border-0 file:bg-[var(--surface-strong)] file:px-3 file:py-2 file:text-[var(--fg)]"
       />
       <BusyButton
         type="button"
@@ -220,14 +220,14 @@ function ReplaceSlides({
         busy={busy && pdf !== null}
         busyLabel="Working…"
         disabled={!pdf}
-        className="mt-3 rounded border border-neutral-700 px-3 py-1.5 text-sm hover:border-neutral-500"
+        className="mt-3 rounded border border-[var(--border)] px-3 py-1.5 text-sm hover:border-[var(--muted)]"
       >
         Replace slides
       </BusyButton>
 
-      <div className="mt-6 border-t border-neutral-900 pt-4">
+      <div className="mt-6 border-t border-[var(--border)] pt-4">
         <label className="block">
-          <span className="mb-1 block text-sm text-neutral-400">
+          <span className="mb-1 block text-sm text-[var(--muted)]">
             …or import a deck from a URL
           </span>
           <input
@@ -237,7 +237,7 @@ function ReplaceSlides({
             value={deckUrl}
             disabled={busy}
             onChange={(e) => setDeckUrl(e.target.value)}
-            className="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 outline-none focus:border-neutral-500 disabled:opacity-50"
+            className="w-full rounded border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[var(--fg)] outline-none focus:border-[var(--muted)] disabled:opacity-50"
           />
         </label>
         <BusyButton
@@ -246,19 +246,19 @@ function ReplaceSlides({
           busy={busy && deckUrl.trim() !== ""}
           busyLabel="Working…"
           disabled={!deckUrl.trim()}
-          className="mt-3 rounded border border-neutral-700 px-3 py-1.5 text-sm hover:border-neutral-500 disabled:opacity-50"
+          className="mt-3 rounded border border-[var(--border)] px-3 py-1.5 text-sm hover:border-[var(--muted)] disabled:opacity-50"
         >
           Import deck
         </BusyButton>
       </div>
 
       {busy && (
-        <p className="mt-2 text-sm text-neutral-400">
+        <p className="mt-2 text-sm text-[var(--muted)]">
           {progress ? describeProgress(progress) : "Starting…"}
         </p>
       )}
-      {done && <p className="mt-2 text-sm text-green-400">Slides updated.</p>}
-      {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
+      {done && <p className="mt-2 text-sm text-green-600 dark:text-green-400">Slides updated.</p>}
+      {error && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
     </section>
   );
 }
