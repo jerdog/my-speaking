@@ -7,9 +7,12 @@
 	],
 	"main": "./workers/app.ts",
 	// Talk metadata (see db/migrations for schema).
+	// NOTE: `binding` is the name the code uses (env.DB), not a Cloudflare
+	// resource name — renaming it breaks every query. `npm run typecheck`
+	// catches a mismatch.
 	"d1_databases": [
 		{
-			"binding": "speaking_db",
+			"binding": "DB",
 			"database_name": "speaking-db",
 			"database_id": "753d7eaa-78e1-4d44-b41e-0b5b068e44d8",
 			"migrations_dir": "db/migrations"
@@ -18,10 +21,11 @@
 	// Original slide PDFs + rasterized slide images.
 	// Reads are served publicly via an R2 custom domain (see README); this
 	// binding is only used by the admin upload routes to write objects.
+	// As above, `binding` must stay SLIDES_BUCKET to match the code.
 	"r2_buckets": [
 		{
 			"bucket_name": "my-speaking-slides",
-			"binding": "my_speaking_slides"
+			"binding": "SLIDES_BUCKET"
 		}
 	],
 	"vars": {

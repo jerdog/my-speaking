@@ -23,9 +23,13 @@ export function sourcePdfKey(talkId: string, version: number): string {
  * which keeps local dev and a fresh deploy working before DNS is set up.
  */
 function publicUrl(cdnBaseUrl: string, key: string): string {
-  return cdnBaseUrl
-    ? `${cdnBaseUrl.replace(/\/$/, "")}/${key}`
-    : `/slides/${key}`;
+  const base = cdnBaseUrl.trim().replace(/\/$/, "");
+  if (!base) return `/slides/${key}`;
+
+  // A bare hostname would otherwise be treated as a relative path and resolve
+  // against the site's own origin.
+  const origin = /^https?:\/\//.test(base) ? base : `https://${base}`;
+  return `${origin}/${key}`;
 }
 
 export function slideUrl(
