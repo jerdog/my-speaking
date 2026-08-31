@@ -29,6 +29,19 @@ to R2. No third-party conversion service is involved.
 | `/admin/talks/:id/edit` | Edit metadata, replace slides, delete |
 | `/api/talks*` | Upload endpoints used by the admin UI |
 
+## Importing a deck from a URL
+
+A talk's edit page can pull a deck straight from a URL instead of you
+downloading and re-uploading it — handy for migrating decks that are already
+hosted somewhere, such as Noti.st's `https://on.notist.cloud/pdf/deck-….pdf`.
+
+The Worker fetches the PDF and streams it into R2 (the browser can't, because
+the source host won't send CORS headers), then the admin page reads it back and
+rasterizes it exactly as it would a local file. It goes through the same
+versioned pipeline, so the talk only changes once every slide has landed.
+
+Non-PDF responses and non-https URLs are rejected.
+
 ## Sessionize integration
 
 If `SESSIONIZE_SPEAKER_ID` is set, `/admin` reads your Sessionize speaker feed

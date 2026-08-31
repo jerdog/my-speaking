@@ -95,6 +95,8 @@ function describe(progress: UploadProgress): string {
   switch (progress.step) {
     case "creating":
       return "Creating talk…";
+    case "fetching":
+      return "Fetching the deck…";
     case "rendering":
       return progress.total
         ? `Rendering slide ${progress.done} of ${progress.total}…`

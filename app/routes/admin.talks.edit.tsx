@@ -14,7 +14,11 @@ import {
 } from "~/lib/db";
 import { deleteTalkObjects } from "~/lib/r2";
 import { validateTalkFields } from "~/lib/talk-input";
-import { uploadTalk, type UploadProgress } from "~/lib/upload-talk.client";
+import {
+  importDeckFromUrl,
+  uploadTalk,
+  type UploadProgress,
+} from "~/lib/upload-talk.client";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   await requireAdmin(request);
@@ -140,20 +144,17 @@ function ReplaceSlides({
   nextVersion: number;
 }) {
   const [pdf, setPdf] = useState<File | null>(null);
+  const [deckUrl, setDeckUrl] = useState("");
   const [progress, setProgress] = useState<UploadProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const revalidator = useRevalidator();
 
-  async function onReplace() {
-    if (!pdf) return;
+  async function run(work: () => Promise<unknown>) {
     setError(null);
     setDone(false);
     try {
-      await uploadTalk(
-        { mode: "replace", talkId, uploadVersion: nextVersion, pdf },
-        setProgress,
-      );
+      await work();
       setDone(true);
       // Refresh so a follow-up replace targets the next version, not this one.
       revalidator.revalidate();
@@ -163,6 +164,23 @@ function ReplaceSlides({
       setProgress(null);
     }
   }
+
+  const onReplace = () =>
+    pdf &&
+    run(() =>
+      uploadTalk(
+        { mode: "replace", talkId, uploadVersion: nextVersion, pdf },
+        setProgress,
+      ),
+    );
+
+  const onImportUrl = () =>
+    run(() =>
+      importDeckFromUrl(
+        { talkId, uploadVersion: nextVersion, url: deckUrl },
+        setProgress,
+      ),
+    );
 
   return (
     <section className="border-t border-neutral-800 pt-8">
@@ -186,6 +204,32 @@ function ReplaceSlides({
       >
         Replace slides
       </button>
+
+      <div className="mt-6 border-t border-neutral-900 pt-4">
+        <label className="block">
+          <span className="mb-1 block text-sm text-neutral-400">
+            …or import a deck from a URL
+          </span>
+          <input
+            type="url"
+            inputMode="url"
+            placeholder="https://on.notist.cloud/pdf/deck-….pdf"
+            value={deckUrl}
+            disabled={progress !== null}
+            onChange={(e) => setDeckUrl(e.target.value)}
+            className="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 outline-none focus:border-neutral-500 disabled:opacity-50"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={onImportUrl}
+          disabled={!deckUrl.trim() || progress !== null}
+          className="mt-3 rounded border border-neutral-700 px-3 py-1.5 text-sm hover:border-neutral-500 disabled:opacity-50"
+        >
+          Import deck
+        </button>
+      </div>
+
       {progress && (
         <p className="mt-2 text-sm text-neutral-400">
           {progress.step} {progress.done}/{progress.total}

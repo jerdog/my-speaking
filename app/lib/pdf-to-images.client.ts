@@ -11,7 +11,7 @@ export interface RasterizedSlide {
  * a PDF renderer, so conversion happens client-side at upload time.
  */
 export async function rasterizePdf(
-  file: File,
+  file: Blob,
   onProgress: (done: number, total: number) => void,
 ): Promise<RasterizedSlide[]> {
   // The legacy build is transpiled and polyfilled; the modern one relies on

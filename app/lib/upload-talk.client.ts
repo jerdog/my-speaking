@@ -1,7 +1,7 @@
 import { rasterizePdf } from "~/lib/pdf-to-images.client";
 
 export interface UploadProgress {
-  step: "creating" | "rendering" | "uploading" | "finishing";
+  step: "creating" | "fetching" | "rendering" | "uploading" | "finishing";
   done: number;
   total: number;
 }
@@ -27,15 +27,56 @@ export async function uploadTalk(
     version = input.uploadVersion;
   }
 
-  const { pdf } = input;
+  await putBinary(
+    `/api/talks/${id}/v/${version}/source`,
+    input.pdf,
+    "application/pdf",
+  );
 
+  return renderAndPublish(id, version, input.pdf, onProgress);
+}
+
+/**
+ * Pulls a deck straight from an external URL: the Worker stores it, then it is
+ * read back here to be rasterized, since only the browser can render a PDF.
+ */
+export async function importDeckFromUrl(
+  {
+    talkId,
+    uploadVersion,
+    url,
+  }: { talkId: string; uploadVersion: number; url: string },
+  onProgress: (progress: UploadProgress) => void,
+): Promise<{ slug: string }> {
+  onProgress({ step: "fetching", done: 0, total: 0 });
+  await postJson(
+    `/api/talks/${talkId}/v/${uploadVersion}/import-source`,
+    "POST",
+    { url },
+  );
+
+  const stored = await fetch(`/api/talks/${talkId}/v/${uploadVersion}/source`);
+  if (!stored.ok) throw new Error(await errorMessage(stored));
+  const pdf = await stored.blob();
+
+  return renderAndPublish(talkId, uploadVersion, pdf, onProgress);
+}
+
+/**
+ * Rasterizes a deck and commits it. Everything lands under the new version, so
+ * the live deck is untouched until the finalize call at the end.
+ */
+async function renderAndPublish(
+  id: string,
+  version: number,
+  pdf: Blob,
+  onProgress: (progress: UploadProgress) => void,
+): Promise<{ slug: string }> {
   onProgress({ step: "rendering", done: 0, total: 0 });
   const slides = await rasterizePdf(pdf, (done, total) =>
     onProgress({ step: "rendering", done, total }),
   );
 
-  // Everything lands under the new version, so the live deck is untouched
-  // until the finalize call below commits it.
   for (const slide of slides) {
     await putBinary(
       `/api/talks/${id}/v/${version}/slides/${slide.pageNumber}`,
@@ -48,8 +89,6 @@ export async function uploadTalk(
       total: slides.length,
     });
   }
-
-  await putBinary(`/api/talks/${id}/v/${version}/source`, pdf, "application/pdf");
 
   onProgress({ step: "finishing", done: slides.length, total: slides.length });
   const finished = await postJson(`/api/talks/${id}`, "PATCH", {

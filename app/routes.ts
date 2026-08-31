@@ -14,5 +14,9 @@ export default [
   route("api/talks", "routes/api.talks.ts"),
   route("api/talks/:id", "routes/api.talk.ts"),
   route("api/talks/:id/v/:version/source", "routes/api.talk-source.ts"),
+  route(
+    "api/talks/:id/v/:version/import-source",
+    "routes/api.talk-import-source.ts",
+  ),
   route("api/talks/:id/v/:version/slides/:n", "routes/api.talk-slide.ts"),
 ] satisfies RouteConfig;
