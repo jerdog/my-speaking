@@ -90,7 +90,59 @@ export async function fetchNotistPresentations(
     }
   }
 
-  return dedupeById(parsed);
+  return withDetails(dedupeById(parsed));
+}
+
+/**
+ * A profile listing carries titles but not the event or the deck — those only
+ * appear on a presentation's own page. Fill the gaps from there, so an import
+ * from a profile gets the same data as importing a single talk.
+ */
+async function withDetails(
+  presentations: NotistPresentation[],
+): Promise<NotistPresentation[]> {
+  const incomplete = presentations.filter(
+    (p) => p.pageUrl && (!p.eventDate || !p.downloadUrl),
+  );
+
+  for (let i = 0; i < Math.min(incomplete.length, MAX_FOLLOWED); i += FOLLOW_BATCH) {
+    const batch = incomplete.slice(i, i + FOLLOW_BATCH);
+    const settled = await Promise.allSettled(
+      batch.map((p) => fetchJson(notistJsonUrl(p.pageUrl!))),
+    );
+
+    settled.forEach((result, index) => {
+      if (result.status !== "fulfilled") return;
+      const detailed = collectPresentationNodes(result.value)
+        .map(parsePresentation)
+        .find((p): p is NotistPresentation => p !== null);
+      if (detailed) Object.assign(batch[index], merge(batch[index], detailed));
+    });
+  }
+
+  return presentations;
+}
+
+/**
+ * A presentation's own page is the fuller record — a profile listing may carry
+ * a shortened blurb and no event — so its values win, with the listing filling
+ * anything the detail page happens to omit.
+ */
+function merge(
+  thin: NotistPresentation,
+  detailed: NotistPresentation,
+): NotistPresentation {
+  return {
+    ...thin,
+    title: detailed.title || thin.title,
+    slug: detailed.slug || thin.slug,
+    abstract: detailed.abstract ?? thin.abstract,
+    downloadUrl: detailed.downloadUrl ?? thin.downloadUrl,
+    conferenceName: detailed.conferenceName ?? thin.conferenceName,
+    conferenceUrl: detailed.conferenceUrl ?? thin.conferenceUrl,
+    eventDate: detailed.eventDate ?? thin.eventDate,
+    location: detailed.location ?? thin.location,
+  };
 }
 
 /**

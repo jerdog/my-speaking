@@ -52,6 +52,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 interface ActionResult {
   imported?: number;
+  skippedNoDate?: number;
   error?: string | null;
   notist?: { url: string; found: NotistPreviewItem[] };
 }
@@ -169,12 +170,13 @@ async function notistAction(
   }
 
   const only = String(formData.get("notistId") ?? "");
-  const toImport = presentations.filter(
-    (p) =>
-      !importedIds.has(p.id) &&
-      p.eventDate !== null &&
-      (only === "all" || p.id === only),
+  const requested = presentations.filter(
+    (p) => !importedIds.has(p.id) && (only === "all" || p.id === only),
   );
+  // A talk needs a date, so anything still missing one is reported rather than
+  // dropped silently.
+  const toImport = requested.filter((p) => p.eventDate !== null);
+  const skippedNoDate = requested.length - toImport.length;
 
   for (const presentation of toImport) {
     const id = crypto.randomUUID();
@@ -197,7 +199,7 @@ async function notistAction(
     });
   }
 
-  return { imported: toImport.length, error: null };
+  return { imported: toImport.length, skippedNoDate, error: null };
 }
 
 function NotistPanel({
@@ -207,7 +209,11 @@ function NotistPanel({
   found: NotistPreviewItem[] | null;
   url: string;
 }) {
-  const importable = found?.filter((p) => !p.alreadyImported) ?? [];
+  // Only talks with a date can be imported, so don't offer a count that
+  // promises more than the import will actually create.
+  const importable =
+    found?.filter((p) => !p.alreadyImported && p.eventDate) ?? [];
+  const undated = found?.filter((p) => !p.alreadyImported && !p.eventDate) ?? [];
 
   return (
     <section className="rounded-lg border border-neutral-800 p-4">
@@ -242,7 +248,8 @@ function NotistPanel({
           <div className="mb-2 flex items-center justify-between">
             <p className="text-sm text-neutral-400">
               Found {found.length} presentation{found.length === 1 ? "" : "s"},{" "}
-              {importable.length} not yet imported.
+              {importable.length} ready to import
+              {undated.length > 0 ? `, ${undated.length} with no date` : ""}.
             </p>
             {importable.length > 0 && (
               <Form method="post">
@@ -386,6 +393,12 @@ export default function AdminDashboard({
         <p className="text-sm text-green-400">
           Imported {actionData.imported} talk
           {actionData.imported === 1 ? "" : "s"} as drafts.
+          {actionData.skippedNoDate ? (
+            <span className="text-amber-400">
+              {" "}
+              Skipped {actionData.skippedNoDate} with no event date.
+            </span>
+          ) : null}
         </p>
       )}
 
