@@ -163,6 +163,8 @@ export default function TalkPage({
         <p className="mt-4">
           <a
             href={pdfUrl}
+            target="_blank"
+            rel="noreferrer"
             className="text-sm text-neutral-400 underline hover:text-neutral-200"
           >
             Download slides (PDF)

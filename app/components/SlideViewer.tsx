@@ -63,16 +63,19 @@ export function SlideViewer({ slideUrls, title }: SlideViewerProps) {
           </>
         )}
       </div>
-      <div className="mt-3 flex items-center justify-between text-sm text-neutral-400">
-        <span>
+      {/* Equal side columns so the dots sit centred under the slide however
+          wide the counter grows. */}
+      <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-4 text-sm text-neutral-400">
+        <span className="justify-self-start whitespace-nowrap">
           Slide {index + 1} of {count}
         </span>
-        <div className="flex gap-1 overflow-x-auto">
+        <div className="flex flex-wrap justify-center gap-1">
           {slideUrls.map((url, i) => (
             <button
               key={url}
               type="button"
               aria-label={`Go to slide ${i + 1}`}
+              aria-current={i === index}
               onClick={() => goTo(i)}
               className={`h-1.5 w-4 rounded-full transition-colors ${
                 i === index ? "bg-white" : "bg-neutral-700 hover:bg-neutral-500"
@@ -80,6 +83,7 @@ export function SlideViewer({ slideUrls, title }: SlideViewerProps) {
             />
           ))}
         </div>
+        <span aria-hidden="true" />
       </div>
     </div>
   );
