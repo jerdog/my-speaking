@@ -27,17 +27,16 @@
 	"vars": {
 		// Public base URL slide images/PDFs are served from (R2 custom domain).
 		// Leave blank to have the Worker stream them from R2 instead.
-		"SLIDES_CDN_URL": "",
+		"SLIDES_CDN_URL": "cdn.speaking.jmeiss.me",
 		// Cloudflare Access team domain, e.g. "your-team.cloudflareaccess.com".
 		"CF_ACCESS_TEAM_DOMAIN": "bluedogdev.cloudflareaccess.com",
 		// The "Application Audience" (AUD) tag for the /admin Access application.
-		"CF_ACCESS_AUD": "20afe80c141e9b2661242b63e19847f5c562b7e568e43a39887c2b116f2b8308",
+		"CF_ACCESS_AUD": "ad0a735d44a4ab51cca024cfa863cba8a76f4fe25f5e24dd51543b1d06e1b3ab",
 		// Only this email is allowed to use the admin/upload routes.
 		"ADMIN_EMAIL": "jeremy.meiss@gmail.com",
 		// Sessionize speaker id (from your Sessionize speaker profile embed page).
 		// Leave blank to disable the "needs slides" prompts in the admin dashboard.
-		"SESSIONIZE_SPEAKER_ID": "0x0x3fb393x",
-		"SLIDES_CDN_URL": "cdn.speaking.jmeiss.me"
+		"SESSIONIZE_SPEAKER_ID": "0x0x3fb393x"
 	},
 	"observability": {
 		"enabled": true
