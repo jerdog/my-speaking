@@ -27,7 +27,7 @@
 	"vars": {
 		// Public base URL slide images/PDFs are served from (R2 custom domain).
 		// Leave blank to have the Worker stream them from R2 instead.
-		"SLIDES_CDN_URL": "cdn.speaking.jmeiss.me",
+		"SLIDES_CDN_URL": "cdn.talks.jmeiss.me",
 		// Cloudflare Access team domain, e.g. "your-team.cloudflareaccess.com".
 		"CF_ACCESS_TEAM_DOMAIN": "bluedogdev.cloudflareaccess.com",
 		// The "Application Audience" (AUD) tag for the /admin Access application.

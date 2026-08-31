@@ -91,13 +91,13 @@ These steps can't be scripted from the repo — do them once, then fill in
    npm run deploy
    ```
 
-   Add a route/custom domain for `speaking.jmeiss.me` to the Worker in the
+   Add a route/custom domain for `talks.jmeiss.me` to the Worker in the
    Cloudflare dashboard (Workers & Pages → your Worker → Domains & Routes).
 
 3. **Protect `/admin` with Cloudflare Access**
 
    In Zero Trust → Access → Applications, add a self-hosted application
-   covering `speaking.jmeiss.me/admin` (and `/api/talks*`), with a policy
+   covering `talks.jmeiss.me/admin` (and `/api/talks*`), with a policy
    allowing your email. Then copy into `wrangler.jsonc`:
 
    - `CF_ACCESS_TEAM_DOMAIN` — e.g. `yourteam.cloudflareaccess.com`
@@ -112,7 +112,7 @@ These steps can't be scripted from the repo — do them once, then fill in
    By default slide images are streamed by the Worker from `/slides/*`. To
    serve them directly from R2 instead, give the bucket a public custom domain
    (R2 → bucket → Settings → Public access → Custom domain), e.g.
-   `cdn.speaking.jmeiss.me`, and set `SLIDES_CDN_URL` to it.
+   `cdn.talks.jmeiss.me`, and set `SLIDES_CDN_URL` to it.
 
 5. **Optional: Sessionize**
 
