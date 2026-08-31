@@ -12,10 +12,6 @@ export interface NotistPresentation {
   pageUrl: string | null;
 }
 
-interface Envelope {
-  data?: unknown;
-}
-
 /**
  * Noti.st never shipped the export API promised in its docs, but every public
  * page serves JSON by appending `.json`, and that carries everything needed:
@@ -37,31 +33,166 @@ export function notistJsonUrl(input: string): string {
   return url.toString();
 }
 
-export async function fetchNotistPresentations(
-  input: string,
-): Promise<NotistPresentation[]> {
-  const response = await fetch(notistJsonUrl(input), {
+/** How many linked presentations to resolve when a profile only lists refs. */
+const MAX_FOLLOWED = 150;
+const FOLLOW_BATCH = 6;
+
+async function fetchJson(url: string): Promise<unknown> {
+  const response = await fetch(url, {
     headers: { accept: "application/json" },
     redirect: "follow",
   });
   if (!response.ok) {
-    throw new Error(`Noti.st returned ${response.status}`);
+    throw new Error(`Noti.st returned ${response.status} for ${url}`);
   }
-
-  const body = await response.json<Envelope>();
-  const entries = Array.isArray(body.data) ? body.data : [];
-
-  return entries
-    .filter(isPresentation)
-    .map(parsePresentation)
-    .filter((p): p is NotistPresentation => p !== null);
+  try {
+    return await response.json();
+  } catch {
+    throw new Error(`${url} did not return JSON`);
+  }
 }
 
-function isPresentation(entry: unknown): entry is Record<string, any> {
-  return (
-    isRecord(entry) &&
-    (entry.type === "presentations" || isRecord(entry.attributes))
+export async function fetchNotistPresentations(
+  input: string,
+): Promise<NotistPresentation[]> {
+  const root = await fetchJson(notistJsonUrl(input));
+  const nodes = collectPresentationNodes(root);
+
+  if (nodes.length === 0) {
+    throw new Error(
+      `No presentations found. The response contained ${describeShape(root)}.`,
+    );
+  }
+
+  const parsed: NotistPresentation[] = [];
+  const toFollow: string[] = [];
+
+  for (const node of nodes) {
+    const presentation = parsePresentation(node);
+    if (presentation) {
+      parsed.push(presentation);
+      continue;
+    }
+    // A profile may list presentations as bare references; resolve those.
+    const link = presentationLink(node);
+    if (link) toFollow.push(link);
+  }
+
+  for (let i = 0; i < Math.min(toFollow.length, MAX_FOLLOWED); i += FOLLOW_BATCH) {
+    const batch = toFollow.slice(i, i + FOLLOW_BATCH);
+    const settled = await Promise.allSettled(batch.map(fetchJson));
+    for (const result of settled) {
+      if (result.status !== "fulfilled") continue;
+      for (const node of collectPresentationNodes(result.value)) {
+        const presentation = parsePresentation(node);
+        if (presentation) parsed.push(presentation);
+      }
+    }
+  }
+
+  return dedupeById(parsed);
+}
+
+/**
+ * Walks the whole response rather than assuming where presentations sit: a
+ * presentation page returns them at the top level, but a profile nests them
+ * under the profile's own entry.
+ */
+function collectPresentationNodes(value: unknown): Record<string, any>[] {
+  const found: Record<string, any>[] = [];
+  const seen = new Set<unknown>();
+
+  const walk = (node: unknown, depth: number) => {
+    if (depth > 8 || !isRecord(node) || seen.has(node)) return;
+    seen.add(node);
+
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item, depth + 1);
+      return;
+    }
+
+    if (node.type === "presentations") found.push(node);
+    for (const child of Object.values(node)) walk(child, depth + 1);
+  };
+
+  walk(value, 0);
+
+  if (found.length > 0) return found;
+
+  // Fall back to shape when `type` is absent, without mistaking an event for a
+  // presentation — events carry a title and slug too, but never a deck.
+  const byShape: Record<string, any>[] = [];
+  const walkShape = (node: unknown, depth: number) => {
+    if (depth > 8 || !isRecord(node)) return;
+    if (Array.isArray(node)) {
+      for (const item of node) walkShape(item, depth + 1);
+      return;
+    }
+    const attributes = node.attributes;
+    if (
+      node.type !== "events" &&
+      isRecord(attributes) &&
+      typeof attributes.title === "string" &&
+      (typeof attributes.download === "string" || "slidedeck" in attributes)
+    ) {
+      byShape.push(node);
+    }
+    for (const child of Object.values(node)) walkShape(child, depth + 1);
+  };
+  walkShape(value, 0);
+  return byShape;
+}
+
+/** A reference to a presentation whose details live at another URL. */
+function presentationLink(node: Record<string, any>): string | null {
+  const links = node.links;
+  if (!isRecord(links)) return null;
+  for (const key of ["related", "self"]) {
+    const value = links[key];
+    if (typeof value === "string" && value) {
+      try {
+        return notistJsonUrl(value);
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+function dedupeById(items: NotistPresentation[]): NotistPresentation[] {
+  const byId = new Map<string, NotistPresentation>();
+  for (const item of items) {
+    if (!byId.has(item.id)) byId.set(item.id, item);
+  }
+  return [...byId.values()];
+}
+
+/** Used in the error when nothing matched, so the response can be diagnosed. */
+function describeShape(value: unknown): string {
+  const types = new Set<string>();
+  const keys = new Set<string>();
+
+  const walk = (node: unknown, depth: number) => {
+    if (depth > 6 || !isRecord(node)) return;
+    if (Array.isArray(node)) {
+      for (const item of node.slice(0, 20)) walk(item, depth + 1);
+      return;
+    }
+    if (typeof node.type === "string") types.add(node.type);
+    if (depth <= 1) for (const key of Object.keys(node)) keys.add(key);
+    for (const child of Object.values(node)) walk(child, depth + 1);
+  };
+  walk(value, 0);
+
+  const parts = [];
+  if (keys.size) parts.push(`keys [${[...keys].slice(0, 10).join(", ")}]`);
+  parts.push(
+    types.size
+      ? `types [${[...types].slice(0, 10).join(", ")}]`
+      : "no typed entries",
   );
+  return parts.join(" and ");
 }
 
 function parsePresentation(
