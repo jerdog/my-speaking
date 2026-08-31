@@ -45,14 +45,15 @@ export async function importDeckFromUrl(
     talkId,
     uploadVersion,
     url,
-  }: { talkId: string; uploadVersion: number; url: string },
+  }: { talkId: string; uploadVersion: number; url?: string },
   onProgress: (progress: UploadProgress) => void,
 ): Promise<{ slug: string }> {
   onProgress({ step: "fetching", done: 0, total: 0 });
+  // With no url the server falls back to the deck recorded at import time.
   await postJson(
     `/api/talks/${talkId}/v/${uploadVersion}/import-source`,
     "POST",
-    { url },
+    url ? { url } : {},
   );
 
   const stored = await fetch(`/api/talks/${talkId}/v/${uploadVersion}/source`);

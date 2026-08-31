@@ -11,6 +11,8 @@ export interface Talk {
   slideCount: number;
   slidesVersion: number;
   sessionizeEventId: string | null;
+  notistId: string | null;
+  notistDownloadUrl: string | null;
   published: boolean;
   createdAt: string;
   updatedAt: string;
@@ -29,6 +31,8 @@ interface TalkRow {
   slide_count: number;
   slides_version: number;
   sessionize_event_id: string | null;
+  notist_id: string | null;
+  notist_download_url: string | null;
   published: number;
   created_at: string;
   updated_at: string;
@@ -48,6 +52,8 @@ function fromRow(row: TalkRow): Talk {
     slideCount: row.slide_count,
     slidesVersion: row.slides_version,
     sessionizeEventId: row.sessionize_event_id,
+    notistId: row.notist_id,
+    notistDownloadUrl: row.notist_download_url,
     published: row.published === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -103,6 +109,8 @@ export interface NewTalkInput {
   abstract: string | null;
   videoUrl: string | null;
   sessionizeEventId: string | null;
+  notistId?: string | null;
+  notistDownloadUrl?: string | null;
 }
 
 export async function insertTalk(
@@ -112,8 +120,8 @@ export async function insertTalk(
   await db
     .prepare(
       `INSERT INTO talks
-        (id, slug, title, conference_name, conference_url, location, event_date, abstract, video_url, sessionize_event_id)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
+        (id, slug, title, conference_name, conference_url, location, event_date, abstract, video_url, sessionize_event_id, notist_id, notist_download_url)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`,
     )
     .bind(
       input.id,
@@ -126,6 +134,8 @@ export async function insertTalk(
       input.abstract,
       input.videoUrl,
       input.sessionizeEventId,
+      input.notistId ?? null,
+      input.notistDownloadUrl ?? null,
     )
     .run();
 }
@@ -148,6 +158,8 @@ export async function updateTalk(
     abstract: "abstract",
     videoUrl: "video_url",
     sessionizeEventId: "sessionize_event_id",
+    notistId: "notist_id",
+    notistDownloadUrl: "notist_download_url",
   };
 
   const entries = Object.entries(input).filter(

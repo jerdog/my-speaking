@@ -29,6 +29,32 @@ to R2. No third-party conversion service is involved.
 | `/admin/talks/:id/edit` | Edit metadata, replace slides, delete |
 | `/api/talks*` | Upload endpoints used by the admin UI |
 
+## Migrating from Noti.st
+
+`/admin` has an **Import from Noti.st** panel. Paste your profile URL (or a
+single presentation URL) and it lists what it finds; import individually or all
+at once.
+
+Noti.st never shipped the export API its docs promise, but every public page
+serves JSON by appending `.json`, and that carries everything needed: the
+title, the `blurb` HTML (converted to plain text for the abstract), and the
+related event's name, `starts_on` date and address. The Noti.st slug is reused
+so incoming URLs keep their shape.
+
+Importing happens in two passes, because rendering a PDF needs a browser and
+because pulling every deck in one request would blow through the Worker's
+subrequest budget on a large backlog:
+
+1. **Metadata** — one request creates all the talks as drafts, recording each
+   deck's `download` URL. Presentations with no event date are skipped, since
+   a talk needs a date.
+2. **Decks** — the dashboard then shows "N decks ready to render". That button
+   works through them one at a time: the Worker fetches each PDF into R2, the
+   browser rasterizes it, and the talk publishes. Leave the tab open.
+
+Re-running an import skips anything already brought across, so it's safe to
+run again after adding talks on Noti.st.
+
 ## Importing a deck from a URL
 
 A talk's edit page can pull a deck straight from a URL instead of you

@@ -1,16 +1,19 @@
-import { Form, Link } from "react-router";
+import { useState } from "react";
+import { Form, Link, useRevalidator } from "react-router";
 
 import type { Route } from "./+types/admin.index";
 import { requireAdmin } from "~/lib/access.server";
 import { env } from "cloudflare:workers";
 import { insertTalk, listAllTalks, slugify, uniqueSlug } from "~/lib/db";
 import { formatEventDate } from "~/lib/format";
+import { fetchNotistPresentations } from "~/lib/notist.server";
 import {
   draftTalkFromEvent,
   fetchSessionizeEvents,
   splitSessionizeEvents,
   type SessionizeEvent,
 } from "~/lib/sessionize.server";
+import { importDeckFromUrl } from "~/lib/upload-talk.client";
 
 export async function loader({ request }: Route.LoaderArgs) {
   await requireAdmin(request);
@@ -34,7 +37,44 @@ export async function loader({ request }: Route.LoaderArgs) {
     }
   }
 
-  return { talks, sessionize };
+  // Drafts imported from Noti.st whose deck hasn't been rendered yet. The
+  // rendering has to happen in a browser, so it's driven from the page.
+  const pendingDecks = talks
+    .filter((talk) => talk.notistDownloadUrl && talk.slideCount === 0)
+    .map((talk) => ({
+      id: talk.id,
+      title: talk.title,
+      uploadVersion: talk.slidesVersion + 1,
+    }));
+
+  return { talks, sessionize, pendingDecks };
+}
+
+interface ActionResult {
+  imported?: number;
+  error?: string | null;
+  notist?: { url: string; found: NotistPreviewItem[] };
+}
+
+export interface NotistPreviewItem {
+  id: string;
+  title: string;
+  conferenceName: string | null;
+  eventDate: string | null;
+  hasDeck: boolean;
+  alreadyImported: boolean;
+}
+
+export async function action({ request }: Route.ActionArgs): Promise<ActionResult> {
+  await requireAdmin(request);
+
+  const formData = await request.formData();
+  const intent = String(formData.get("intent") ?? "sessionize");
+
+  if (intent === "notist-preview" || intent === "notist-import") {
+    return notistAction(intent, formData);
+  }
+  return sessionizeImport(formData);
 }
 
 /**
@@ -42,10 +82,7 @@ export async function loader({ request }: Route.LoaderArgs) {
  * rather than taken from the form, so the browser only ever names which events
  * to import, never their contents.
  */
-export async function action({ request }: Route.ActionArgs) {
-  await requireAdmin(request);
-
-  const formData = await request.formData();
+async function sessionizeImport(formData: FormData): Promise<ActionResult> {
   const eventId = String(formData.get("eventId") ?? "");
   if (!eventId) return { imported: 0, error: "No event specified" };
 
@@ -85,23 +122,279 @@ export async function action({ request }: Route.ActionArgs) {
   return { imported: toImport.length, error: null };
 }
 
+/**
+ * Reads a Noti.st profile or presentation page as JSON, then either previews
+ * what it found or creates drafts. Only the deck URL is recorded here; the PDF
+ * itself is pulled per talk afterwards to stay well inside the Worker's
+ * subrequest budget on a large backlog.
+ */
+async function notistAction(
+  intent: string,
+  formData: FormData,
+): Promise<ActionResult> {
+  const url = String(formData.get("notistUrl") ?? "").trim();
+  if (!url) return { error: "Paste a Noti.st URL first" };
+
+  let presentations;
+  try {
+    presentations = await fetchNotistPresentations(url);
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Noti.st unavailable",
+    };
+  }
+  if (presentations.length === 0) {
+    return { error: "No presentations found at that URL" };
+  }
+
+  const existing = await listAllTalks(env.DB);
+  const importedIds = new Set(
+    existing.map((talk) => talk.notistId).filter(Boolean),
+  );
+
+  if (intent === "notist-preview") {
+    return {
+      notist: {
+        url,
+        found: presentations.map((p) => ({
+          id: p.id,
+          title: p.title,
+          conferenceName: p.conferenceName,
+          eventDate: p.eventDate,
+          hasDeck: p.downloadUrl !== null,
+          alreadyImported: importedIds.has(p.id),
+        })),
+      },
+    };
+  }
+
+  const only = String(formData.get("notistId") ?? "");
+  const toImport = presentations.filter(
+    (p) =>
+      !importedIds.has(p.id) &&
+      p.eventDate !== null &&
+      (only === "all" || p.id === only),
+  );
+
+  for (const presentation of toImport) {
+    const id = crypto.randomUUID();
+    await insertTalk(env.DB, {
+      id,
+      slug: await uniqueSlug(
+        env.DB,
+        presentation.slug || slugify(presentation.title) || id,
+      ),
+      title: presentation.title,
+      conferenceName: presentation.conferenceName ?? presentation.title,
+      conferenceUrl: presentation.conferenceUrl,
+      location: presentation.location,
+      eventDate: presentation.eventDate!,
+      abstract: presentation.abstract,
+      videoUrl: null,
+      sessionizeEventId: null,
+      notistId: presentation.id,
+      notistDownloadUrl: presentation.downloadUrl,
+    });
+  }
+
+  return { imported: toImport.length, error: null };
+}
+
+function NotistPanel({
+  found,
+  url,
+}: {
+  found: NotistPreviewItem[] | null;
+  url: string;
+}) {
+  const importable = found?.filter((p) => !p.alreadyImported) ?? [];
+
+  return (
+    <section className="rounded-lg border border-neutral-800 p-4">
+      <h2 className="mb-1 text-sm font-semibold text-neutral-300">
+        Import from Noti.st
+      </h2>
+      <p className="mb-4 text-sm text-neutral-500">
+        Paste your Noti.st profile URL to list everything on it, or a single
+        presentation URL. Importing brings across the title, abstract,
+        conference, date and location, and remembers where the deck lives.
+      </p>
+
+      <Form method="post" className="flex flex-col gap-2 sm:flex-row">
+        <input type="hidden" name="intent" value="notist-preview" />
+        <input
+          type="url"
+          name="notistUrl"
+          defaultValue={url}
+          placeholder="https://speaking.jmeiss.me/"
+          className="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 outline-none focus:border-neutral-500"
+        />
+        <button
+          type="submit"
+          className="shrink-0 rounded border border-neutral-700 px-3 py-2 text-sm hover:border-neutral-500"
+        >
+          Look up
+        </button>
+      </Form>
+
+      {found && (
+        <div className="mt-4">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-sm text-neutral-400">
+              Found {found.length} presentation{found.length === 1 ? "" : "s"},{" "}
+              {importable.length} not yet imported.
+            </p>
+            {importable.length > 0 && (
+              <Form method="post">
+                <input type="hidden" name="intent" value="notist-import" />
+                <input type="hidden" name="notistUrl" value={url} />
+                <input type="hidden" name="notistId" value="all" />
+                <button
+                  type="submit"
+                  className="rounded bg-white px-3 py-1.5 text-sm font-medium text-black hover:bg-neutral-200"
+                >
+                  Import all ({importable.length})
+                </button>
+              </Form>
+            )}
+          </div>
+          <ul className="max-h-80 divide-y divide-neutral-800 overflow-y-auto border-y border-neutral-800">
+            {found.map((p) => (
+              <li
+                key={p.id}
+                className="flex items-center justify-between gap-3 py-2 text-sm"
+              >
+                <div className="min-w-0">
+                  <p className="truncate">{p.title}</p>
+                  <p className="text-xs text-neutral-500">
+                    {p.conferenceName ?? "no event"}
+                    {p.eventDate ? ` · ${p.eventDate}` : " · no date"}
+                    {p.hasDeck ? "" : " · no deck"}
+                  </p>
+                </div>
+                {p.alreadyImported ? (
+                  <span className="shrink-0 text-xs text-neutral-600">
+                    imported
+                  </span>
+                ) : (
+                  <Form method="post" className="shrink-0">
+                    <input type="hidden" name="intent" value="notist-import" />
+                    <input type="hidden" name="notistUrl" value={url} />
+                    <input type="hidden" name="notistId" value={p.id} />
+                    <button
+                      type="submit"
+                      className="rounded border border-neutral-700 px-2 py-1 text-xs hover:border-neutral-500"
+                    >
+                      Import
+                    </button>
+                  </Form>
+                )}
+              </li>
+            ))}
+          </ul>
+          {found.some((p) => !p.eventDate) && (
+            <p className="mt-2 text-xs text-neutral-500">
+              Presentations with no event date are skipped — a talk needs a date.
+            </p>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PendingDecks({
+  pending,
+}: {
+  pending: { id: string; title: string; uploadVersion: number }[];
+}) {
+  const [running, setRunning] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const [failures, setFailures] = useState<string[]>([]);
+  const revalidator = useRevalidator();
+
+  async function renderAll() {
+    setRunning(true);
+    setFailures([]);
+    const failed: string[] = [];
+
+    for (const [index, talk] of pending.entries()) {
+      try {
+        await importDeckFromUrl(
+          { talkId: talk.id, uploadVersion: talk.uploadVersion },
+          (progress) =>
+            setStatus(
+              `${index + 1}/${pending.length} · ${talk.title} · ${progress.step}` +
+                (progress.total ? ` ${progress.done}/${progress.total}` : ""),
+            ),
+        );
+      } catch (error) {
+        failed.push(
+          `${talk.title}: ${error instanceof Error ? error.message : "failed"}`,
+        );
+      }
+    }
+
+    setStatus(null);
+    setFailures(failed);
+    setRunning(false);
+    revalidator.revalidate();
+  }
+
+  return (
+    <section className="rounded-lg border border-amber-900/60 bg-amber-950/20 p-4">
+      <h2 className="mb-1 text-sm font-semibold text-amber-400">
+        {pending.length} deck{pending.length === 1 ? "" : "s"} ready to render
+      </h2>
+      <p className="mb-3 text-sm text-neutral-400">
+        Imported talks whose slides haven't been built yet. Rendering happens in
+        this browser, so leave the tab open — each deck is fetched, converted to
+        images and published as it finishes.
+      </p>
+      <button
+        type="button"
+        onClick={renderAll}
+        disabled={running}
+        className="rounded bg-white px-3 py-1.5 text-sm font-medium text-black hover:bg-neutral-200 disabled:opacity-50"
+      >
+        {running ? "Rendering…" : "Render all decks"}
+      </button>
+      {status && <p className="mt-2 text-sm text-neutral-400">{status}</p>}
+      {failures.length > 0 && (
+        <ul className="mt-2 space-y-1 text-sm text-red-400">
+          {failures.map((f) => (
+            <li key={f}>{f}</li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export default function AdminDashboard({
   loaderData,
   actionData,
 }: Route.ComponentProps) {
-  const { talks, sessionize } = loaderData;
+  const { talks, sessionize, pendingDecks } = loaderData;
 
   return (
     <div className="space-y-12">
       {actionData?.error && (
         <p className="text-sm text-red-400">Import failed: {actionData.error}</p>
       )}
-      {actionData && !actionData.error && (
+      {actionData?.imported !== undefined && !actionData.error && (
         <p className="text-sm text-green-400">
           Imported {actionData.imported} talk
           {actionData.imported === 1 ? "" : "s"} as drafts.
         </p>
       )}
+
+      {pendingDecks.length > 0 && <PendingDecks pending={pendingDecks} />}
+
+      <NotistPanel
+        found={actionData?.notist?.found ?? null}
+        url={actionData?.notist?.url ?? ""}
+      />
 
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Talks</h1>
