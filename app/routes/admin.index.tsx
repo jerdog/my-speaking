@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Form, Link, useRevalidator } from "react-router";
+import { Form, Link, redirect, useRevalidator } from "react-router";
 
 import type { Route } from "./+types/admin.index";
 import { requireAdmin } from "~/lib/access.server";
@@ -18,6 +18,7 @@ import { importDeckFromUrl } from "~/lib/upload-talk.client";
 export async function loader({ request }: Route.LoaderArgs) {
   await requireAdmin(request);
 
+  const url = new URL(request.url);
   const talks = await listAllTalks(env.DB);
 
   let sessionize: {
@@ -47,14 +48,63 @@ export async function loader({ request }: Route.LoaderArgs) {
       uploadVersion: talk.slidesVersion + 1,
     }));
 
-  return { talks, sessionize, pendingDecks };
+  // The Noti.st list is keyed off the URL rather than an action result, so it
+  // survives an import instead of vanishing and needing a fresh lookup.
+  const notistUrl = url.searchParams.get("notist")?.trim() ?? "";
+  let notist: {
+    url: string;
+    found: NotistPreviewItem[];
+    error: string | null;
+  } | null = null;
+
+  if (notistUrl) {
+    const importedByNotistId = new Map(
+      talks
+        .filter((talk) => talk.notistId)
+        .map((talk) => [talk.notistId as string, talk]),
+    );
+    try {
+      const presentations = await fetchNotistPresentations(notistUrl, {
+        skipDetailFor: new Set(importedByNotistId.keys()),
+      });
+      notist = {
+        url: notistUrl,
+        error: null,
+        found: presentations.map((p) => ({
+          id: p.id,
+          title: p.title,
+          conferenceName: p.conferenceName,
+          eventDate: p.eventDate,
+          hasDeck: p.downloadUrl !== null,
+          importedSlug: importedByNotistId.get(p.id)?.slug ?? null,
+        })),
+      };
+    } catch (error) {
+      notist = {
+        url: notistUrl,
+        found: [],
+        error: error instanceof Error ? error.message : "Noti.st unavailable",
+      };
+    }
+  }
+
+  const imported = Number(url.searchParams.get("imported"));
+  const skippedNoDate = Number(url.searchParams.get("skipped"));
+
+  return {
+    talks,
+    sessionize,
+    pendingDecks,
+    notist,
+    lastImport: Number.isInteger(imported)
+      ? { imported, skippedNoDate: skippedNoDate || 0 }
+      : null,
+  };
 }
 
 interface ActionResult {
   imported?: number;
-  skippedNoDate?: number;
   error?: string | null;
-  notist?: { url: string; found: NotistPreviewItem[] };
 }
 
 export interface NotistPreviewItem {
@@ -63,18 +113,19 @@ export interface NotistPreviewItem {
   conferenceName: string | null;
   eventDate: string | null;
   hasDeck: boolean;
-  alreadyImported: boolean;
+  /** Slug of the local talk once imported, for jumping straight to it. */
+  importedSlug: string | null;
 }
 
-export async function action({ request }: Route.ActionArgs): Promise<ActionResult> {
+export async function action({
+  request,
+}: Route.ActionArgs): Promise<ActionResult | Response> {
   await requireAdmin(request);
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "sessionize");
 
-  if (intent === "notist-preview" || intent === "notist-import") {
-    return notistAction(intent, formData);
-  }
+  if (intent === "notist-import") return notistImport(formData);
   return sessionizeImport(formData);
 }
 
@@ -124,15 +175,11 @@ async function sessionizeImport(formData: FormData): Promise<ActionResult> {
 }
 
 /**
- * Reads a Noti.st profile or presentation page as JSON, then either previews
- * what it found or creates drafts. Only the deck URL is recorded here; the PDF
- * itself is pulled per talk afterwards to stay well inside the Worker's
- * subrequest budget on a large backlog.
+ * Creates drafts from a Noti.st profile or presentation page. Only the deck URL
+ * is recorded here; the PDF itself is pulled per talk afterwards to stay well
+ * inside the Worker's subrequest budget on a large backlog.
  */
-async function notistAction(
-  intent: string,
-  formData: FormData,
-): Promise<ActionResult> {
+async function notistImport(formData: FormData) {
   const url = String(formData.get("notistUrl") ?? "").trim();
   if (!url) return { error: "Paste a Noti.st URL first" };
 
@@ -144,30 +191,11 @@ async function notistAction(
       error: error instanceof Error ? error.message : "Noti.st unavailable",
     };
   }
-  if (presentations.length === 0) {
-    return { error: "No presentations found at that URL" };
-  }
 
   const existing = await listAllTalks(env.DB);
   const importedIds = new Set(
     existing.map((talk) => talk.notistId).filter(Boolean),
   );
-
-  if (intent === "notist-preview") {
-    return {
-      notist: {
-        url,
-        found: presentations.map((p) => ({
-          id: p.id,
-          title: p.title,
-          conferenceName: p.conferenceName,
-          eventDate: p.eventDate,
-          hasDeck: p.downloadUrl !== null,
-          alreadyImported: importedIds.has(p.id),
-        })),
-      },
-    };
-  }
 
   const only = String(formData.get("notistId") ?? "");
   const requested = presentations.filter(
@@ -199,21 +227,32 @@ async function notistAction(
     });
   }
 
-  return { imported: toImport.length, skippedNoDate, error: null };
+  // Back to the same list, so it's still there for the next import.
+  const back = new URLSearchParams({
+    notist: url,
+    imported: String(toImport.length),
+  });
+  if (skippedNoDate) back.set("skipped", String(skippedNoDate));
+  return redirect(`/admin?${back}`);
 }
 
 function NotistPanel({
-  found,
-  url,
+  notist,
 }: {
-  found: NotistPreviewItem[] | null;
-  url: string;
+  notist: {
+    url: string;
+    found: NotistPreviewItem[];
+    error: string | null;
+  } | null;
 }) {
+  const revalidator = useRevalidator();
+  const found = notist && !notist.error ? notist.found : null;
+  const url = notist?.url ?? "";
+
   // Only talks with a date can be imported, so don't offer a count that
   // promises more than the import will actually create.
-  const importable =
-    found?.filter((p) => !p.alreadyImported && p.eventDate) ?? [];
-  const undated = found?.filter((p) => !p.alreadyImported && !p.eventDate) ?? [];
+  const importable = found?.filter((p) => !p.importedSlug && p.eventDate) ?? [];
+  const undated = found?.filter((p) => !p.importedSlug && !p.eventDate) ?? [];
 
   return (
     <section className="rounded-lg border border-neutral-800 p-4">
@@ -223,16 +262,17 @@ function NotistPanel({
       <p className="mb-4 text-sm text-neutral-500">
         Paste your Noti.st profile URL to list everything on it, or a single
         presentation URL. Importing brings across the title, abstract,
-        conference, date and location, and remembers where the deck lives.
+        conference, date and location, and remembers where the deck lives. The
+        list stays put, so you can work through it one at a time.
       </p>
 
-      <Form method="post" className="flex flex-col gap-2 sm:flex-row">
-        <input type="hidden" name="intent" value="notist-preview" />
+      {/* A GET so the list lives in the URL and survives each import. */}
+      <Form method="get" className="flex flex-col gap-2 sm:flex-row">
         <input
           type="url"
-          name="notistUrl"
+          name="notist"
           defaultValue={url}
-          placeholder="https://speaking.jmeiss.me/"
+          placeholder="https://noti.st/yourname"
           className="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 outline-none focus:border-neutral-500"
         />
         <button
@@ -243,13 +283,25 @@ function NotistPanel({
         </button>
       </Form>
 
+      {notist?.error && (
+        <p className="mt-3 text-sm text-red-400">{notist.error}</p>
+      )}
+
       {found && (
         <div className="mt-4">
-          <div className="mb-2 flex items-center justify-between">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-neutral-400">
               Found {found.length} presentation{found.length === 1 ? "" : "s"},{" "}
               {importable.length} ready to import
-              {undated.length > 0 ? `, ${undated.length} with no date` : ""}.
+              {undated.length > 0 ? `, ${undated.length} with no date` : ""}.{" "}
+              <button
+                type="button"
+                onClick={() => revalidator.revalidate()}
+                disabled={revalidator.state !== "idle"}
+                className="underline hover:text-neutral-200 disabled:opacity-50"
+              >
+                {revalidator.state === "idle" ? "Refresh" : "Refreshing…"}
+              </button>
             </p>
             {importable.length > 0 && (
               <Form method="post">
@@ -273,15 +325,30 @@ function NotistPanel({
               >
                 <div className="min-w-0">
                   <p className="truncate">{p.title}</p>
+                  {/* Imported rows aren't re-fetched from Noti.st, so showing
+                      its fields here would read as missing data. */}
                   <p className="text-xs text-neutral-500">
-                    {p.conferenceName ?? "no event"}
-                    {p.eventDate ? ` · ${p.eventDate}` : " · no date"}
-                    {p.hasDeck ? "" : " · no deck"}
+                    {p.importedSlug ? (
+                      "already imported"
+                    ) : (
+                      <>
+                        {p.conferenceName ?? "no event"}
+                        {p.eventDate ? ` · ${p.eventDate}` : " · no date"}
+                        {p.hasDeck ? "" : " · no deck"}
+                      </>
+                    )}
                   </p>
                 </div>
-                {p.alreadyImported ? (
+                {p.importedSlug ? (
+                  <Link
+                    to={`/talks/${p.importedSlug}`}
+                    className="shrink-0 text-xs text-neutral-400 underline hover:text-neutral-200"
+                  >
+                    Preview
+                  </Link>
+                ) : !p.eventDate ? (
                   <span className="shrink-0 text-xs text-neutral-600">
-                    imported
+                    needs a date
                   </span>
                 ) : (
                   <Form method="post" className="shrink-0">
@@ -382,7 +449,7 @@ export default function AdminDashboard({
   loaderData,
   actionData,
 }: Route.ComponentProps) {
-  const { talks, sessionize, pendingDecks } = loaderData;
+  const { talks, sessionize, pendingDecks, notist, lastImport } = loaderData;
 
   return (
     <div className="space-y-12">
@@ -393,10 +460,16 @@ export default function AdminDashboard({
         <p className="text-sm text-green-400">
           Imported {actionData.imported} talk
           {actionData.imported === 1 ? "" : "s"} as drafts.
-          {actionData.skippedNoDate ? (
+        </p>
+      )}
+      {lastImport && (
+        <p className="text-sm text-green-400">
+          Imported {lastImport.imported} talk
+          {lastImport.imported === 1 ? "" : "s"} as drafts.
+          {lastImport.skippedNoDate ? (
             <span className="text-amber-400">
               {" "}
-              Skipped {actionData.skippedNoDate} with no event date.
+              Skipped {lastImport.skippedNoDate} with no event date.
             </span>
           ) : null}
         </p>
@@ -404,10 +477,7 @@ export default function AdminDashboard({
 
       {pendingDecks.length > 0 && <PendingDecks pending={pendingDecks} />}
 
-      <NotistPanel
-        found={actionData?.notist?.found ?? null}
-        url={actionData?.notist?.url ?? ""}
-      />
+      <NotistPanel notist={notist} />
 
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Talks</h1>
@@ -525,12 +595,20 @@ export default function AdminDashboard({
                     )}
                   </p>
                 </div>
-                <Link
-                  to={`/admin/talks/${talk.id}/edit`}
-                  className="text-sm text-neutral-400 underline hover:text-neutral-200"
-                >
-                  Edit
-                </Link>
+                <div className="flex shrink-0 items-center gap-3 text-sm">
+                  <Link
+                    to={`/talks/${talk.slug}`}
+                    className="text-neutral-400 underline hover:text-neutral-200"
+                  >
+                    {talk.published ? "View" : "Preview"}
+                  </Link>
+                  <Link
+                    to={`/admin/talks/${talk.id}/edit`}
+                    className="text-neutral-400 underline hover:text-neutral-200"
+                  >
+                    Edit
+                  </Link>
+                </div>
               </li>
             ))}
           </ul>

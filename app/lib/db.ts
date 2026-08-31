@@ -180,7 +180,11 @@ export async function updateTalk(
     .run();
 }
 
-/** Publishes an uploaded deck by pointing the talk at its new version. */
+/**
+ * Points a talk at a newly uploaded deck. Deliberately leaves `published`
+ * alone: a new talk stays a draft so it can be previewed first, and replacing
+ * the deck on a live talk doesn't take it offline.
+ */
 export async function commitTalkSlides(
   db: D1Database,
   id: string,
@@ -190,10 +194,23 @@ export async function commitTalkSlides(
   await db
     .prepare(
       `UPDATE talks
-       SET slide_count = ?2, slides_version = ?3, published = 1, updated_at = datetime('now')
+       SET slide_count = ?2, slides_version = ?3, updated_at = datetime('now')
        WHERE id = ?1`,
     )
     .bind(id, slideCount, slidesVersion)
+    .run();
+}
+
+export async function setTalkPublished(
+  db: D1Database,
+  id: string,
+  published: boolean,
+): Promise<void> {
+  await db
+    .prepare(
+      "UPDATE talks SET published = ?2, updated_at = datetime('now') WHERE id = ?1",
+    )
+    .bind(id, published ? 1 : 0)
     .run();
 }
 

@@ -54,6 +54,7 @@ async function fetchJson(url: string): Promise<unknown> {
 
 export async function fetchNotistPresentations(
   input: string,
+  options: { skipDetailFor?: Set<string> } = {},
 ): Promise<NotistPresentation[]> {
   const root = await fetchJson(notistJsonUrl(input));
   const nodes = collectPresentationNodes(root);
@@ -90,7 +91,7 @@ export async function fetchNotistPresentations(
     }
   }
 
-  return withDetails(dedupeById(parsed));
+  return withDetails(dedupeById(parsed), options.skipDetailFor);
 }
 
 /**
@@ -100,9 +101,15 @@ export async function fetchNotistPresentations(
  */
 async function withDetails(
   presentations: NotistPresentation[],
+  skipDetailFor?: Set<string>,
 ): Promise<NotistPresentation[]> {
+  // Talks already imported never need completing, which keeps repeat lookups
+  // cheap as the backlog shrinks.
   const incomplete = presentations.filter(
-    (p) => p.pageUrl && (!p.eventDate || !p.downloadUrl),
+    (p) =>
+      p.pageUrl &&
+      (!p.eventDate || !p.downloadUrl) &&
+      !skipDetailFor?.has(p.id),
   );
 
   for (let i = 0; i < Math.min(incomplete.length, MAX_FOLLOWED); i += FOLLOW_BATCH) {

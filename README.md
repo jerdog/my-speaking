@@ -41,6 +41,10 @@ title, the `blurb` HTML (converted to plain text for the abstract), and the
 related event's name, `starts_on` date and address. The Noti.st slug is reused
 so incoming URLs keep their shape.
 
+The list lives in the page URL (`/admin?notist=…`), so it stays put as you
+import from it one at a time, with a **Refresh** to pick up anything added on
+Noti.st since. Rows already brought across link straight to the local talk.
+
 Importing happens in two passes, because rendering a PDF needs a browser and
 because pulling every deck in one request would blow through the Worker's
 subrequest budget on a large backlog:
@@ -49,11 +53,22 @@ subrequest budget on a large backlog:
    deck's `download` URL. Presentations with no event date are skipped, since
    a talk needs a date.
 2. **Decks** — the dashboard then shows "N decks ready to render". That button
-   works through them one at a time: the Worker fetches each PDF into R2, the
-   browser rasterizes it, and the talk publishes. Leave the tab open.
+   works through them one at a time: the Worker fetches each PDF into R2 and
+   the browser rasterizes it. Leave the tab open.
 
 Re-running an import skips anything already brought across, so it's safe to
 run again after adding talks on Noti.st.
+
+## Drafts, previewing and publishing
+
+A talk is a draft until you publish it. Uploading or rendering a deck never
+publishes by itself, so nothing goes live before you've looked at it.
+
+A draft's page is a private preview: `/talks/its-slug` renders exactly as it
+will once live, with a banner offering **Publish**, and is a plain 404 to
+everyone else — as are its slide images and PDF. Published talks show a small
+admin bar with **Unpublish**, which takes a talk back offline without deleting
+it. Replacing the deck on a live talk leaves it live.
 
 ## Importing a deck from a URL
 

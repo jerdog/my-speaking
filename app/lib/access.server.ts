@@ -27,6 +27,29 @@ function getJwks(teamDomain: string) {
 export async function requireAdmin(request: Request): Promise<AdminIdentity> {
   requireSameOrigin(request);
 
+  const identity = await resolveAdmin(request);
+  if (!identity) {
+    throw new Response("Unauthorized", { status: 401 });
+  }
+  return identity;
+}
+
+/**
+ * Identifies the admin without demanding it, so public pages can show a talk
+ * that isn't published yet to the person who owns it and stay a plain 404 for
+ * everybody else.
+ */
+export async function optionalAdmin(
+  request: Request,
+): Promise<AdminIdentity | null> {
+  try {
+    return await resolveAdmin(request);
+  } catch {
+    return null;
+  }
+}
+
+async function resolveAdmin(request: Request): Promise<AdminIdentity | null> {
   // Access sits in front of the deployed site, so there is no JWT to verify
   // locally. `import.meta.env.DEV` is statically false in production builds,
   // so this branch is stripped from the deployed Worker.
@@ -38,9 +61,7 @@ export async function requireAdmin(request: Request): Promise<AdminIdentity> {
     request.headers.get("Cf-Access-Jwt-Assertion") ??
     parseCookie(request.headers.get("Cookie"), "CF_Authorization");
 
-  if (!token) {
-    throw new Response("Unauthorized", { status: 401 });
-  }
+  if (!token) return null;
 
   let email: unknown;
   try {
@@ -50,14 +71,14 @@ export async function requireAdmin(request: Request): Promise<AdminIdentity> {
     });
     email = payload.email;
   } catch {
-    throw new Response("Unauthorized", { status: 401 });
+    return null;
   }
 
   if (
     typeof email !== "string" ||
     email.toLowerCase() !== env.ADMIN_EMAIL.toLowerCase()
   ) {
-    throw new Response("Forbidden", { status: 403 });
+    return null;
   }
 
   return { email };
