@@ -8,6 +8,7 @@ export interface Talk {
   eventDate: string;
   abstract: string | null;
   videoUrl: string | null;
+  repoUrl: string | null;
   slideCount: number;
   slidesVersion: number;
   sessionizeEventId: string | null;
@@ -28,6 +29,7 @@ interface TalkRow {
   event_date: string;
   abstract: string | null;
   video_url: string | null;
+  repo_url: string | null;
   slide_count: number;
   slides_version: number;
   sessionize_event_id: string | null;
@@ -49,6 +51,7 @@ function fromRow(row: TalkRow): Talk {
     eventDate: row.event_date,
     abstract: row.abstract,
     videoUrl: row.video_url,
+    repoUrl: row.repo_url,
     slideCount: row.slide_count,
     slidesVersion: row.slides_version,
     sessionizeEventId: row.sessionize_event_id,
@@ -108,6 +111,8 @@ export interface NewTalkInput {
   eventDate: string;
   abstract: string | null;
   videoUrl: string | null;
+  // Only the admin form supplies this; importers have no repo to point at.
+  repoUrl?: string | null;
   sessionizeEventId: string | null;
   notistId?: string | null;
   notistDownloadUrl?: string | null;
@@ -120,8 +125,8 @@ export async function insertTalk(
   await db
     .prepare(
       `INSERT INTO talks
-        (id, slug, title, conference_name, conference_url, location, event_date, abstract, video_url, sessionize_event_id, notist_id, notist_download_url)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`,
+        (id, slug, title, conference_name, conference_url, location, event_date, abstract, video_url, repo_url, sessionize_event_id, notist_id, notist_download_url)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`,
     )
     .bind(
       input.id,
@@ -133,6 +138,7 @@ export async function insertTalk(
       input.eventDate,
       input.abstract,
       input.videoUrl,
+      input.repoUrl ?? null,
       input.sessionizeEventId,
       input.notistId ?? null,
       input.notistDownloadUrl ?? null,
@@ -157,6 +163,7 @@ export async function updateTalk(
     eventDate: "event_date",
     abstract: "abstract",
     videoUrl: "video_url",
+    repoUrl: "repo_url",
     sessionizeEventId: "sessionize_event_id",
     notistId: "notist_id",
     notistDownloadUrl: "notist_download_url",

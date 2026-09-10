@@ -11,6 +11,7 @@ export default [
     route("talks/:id/edit", "routes/admin.talks.edit.tsx"),
   ]),
 
+  route("api/repo-suggest", "routes/api.repo-suggest.ts"),
   route("api/talks", "routes/api.talks.ts"),
   route("api/talks/:id", "routes/api.talk.ts"),
   route("api/talks/:id/v/:version/source", "routes/api.talk-source.ts"),

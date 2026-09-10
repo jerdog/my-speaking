@@ -6,6 +6,7 @@ export interface TalkFields {
   location: string | null;
   abstract: string | null;
   videoUrl: string | null;
+  repoUrl: string | null;
 }
 
 export type ValidationResult =
@@ -30,16 +31,29 @@ export function validateTalkFields(
     return { ok: false, error: "eventDate must be a valid YYYY-MM-DD date" };
   }
 
+  // These are rendered as hrefs, so anything that isn't an http(s) URL is
+  // rejected rather than stored — a `javascript:` link would otherwise run on
+  // the public talk page.
+  const links = {
+    conferenceUrl: trimmed(input.conferenceUrl),
+    videoUrl: trimmed(input.videoUrl),
+    repoUrl: trimmed(input.repoUrl),
+  };
+  for (const [key, value] of Object.entries(links)) {
+    if (value !== null && !isHttpUrl(value)) {
+      return { ok: false, error: `${key} must be an http(s) URL` };
+    }
+  }
+
   return {
     ok: true,
     value: {
       title,
       conferenceName,
       eventDate,
-      conferenceUrl: trimmed(input.conferenceUrl),
       location: trimmed(input.location),
       abstract: trimmed(input.abstract),
-      videoUrl: trimmed(input.videoUrl),
+      ...links,
     },
   };
 }
@@ -48,6 +62,15 @@ export function trimmed(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const text = value.trim();
   return text === "" ? null : text;
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function isCalendarDate(value: string): boolean {

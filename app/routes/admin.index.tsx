@@ -12,7 +12,13 @@ import { BusyButton } from "~/components/Busy";
 import type { Route } from "./+types/admin.index";
 import { requireAdmin } from "~/lib/access.server";
 import { env } from "cloudflare:workers";
-import { insertTalk, listAllTalks, slugify, uniqueSlug } from "~/lib/db";
+import {
+  insertTalk,
+  listAllTalks,
+  slugify,
+  uniqueSlug,
+  updateTalk,
+} from "~/lib/db";
 import { formatEventDate } from "~/lib/format";
 import { fetchNotistPresentations } from "~/lib/notist.server";
 import {
@@ -21,6 +27,7 @@ import {
   splitSessionizeEvents,
   type SessionizeEvent,
 } from "~/lib/sessionize.server";
+import { trimmed } from "~/lib/talk-input";
 import { importDeckFromUrl } from "~/lib/upload-talk.client";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -104,6 +111,16 @@ export async function loader({ request }: Route.LoaderArgs) {
     sessionize,
     pendingDecks,
     notist,
+    // Repo links are admin-only, so the panel that manages them lives here
+    // rather than anywhere a visitor can reach.
+    repoLinks: talks.map((talk) => ({
+      id: talk.id,
+      title: talk.title,
+      conferenceName: talk.conferenceName,
+      eventDate: talk.eventDate,
+      repoUrl: talk.repoUrl,
+    })),
+    githubEnabled: Boolean(env.GITHUB_USERNAME),
     lastImport: Number.isInteger(imported)
       ? { imported, skippedNoDate: skippedNoDate || 0 }
       : null,
@@ -113,6 +130,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 interface ActionResult {
   imported?: number;
   error?: string | null;
+  savedRepoFor?: string;
 }
 
 export interface NotistPreviewItem {
@@ -134,7 +152,22 @@ export async function action({
   const intent = String(formData.get("intent") ?? "sessionize");
 
   if (intent === "notist-import") return notistImport(formData);
+  if (intent === "set-repo") return setRepo(formData);
   return sessionizeImport(formData);
+}
+
+/** Saves (or clears) one talk's GitHub link from the repo-links panel. */
+async function setRepo(formData: FormData): Promise<ActionResult> {
+  const talkId = String(formData.get("talkId") ?? "");
+  if (!talkId) return { error: "No talk specified" };
+
+  const repoUrl = trimmed(formData.get("repoUrl"));
+  if (repoUrl !== null && !/^https?:\/\//i.test(repoUrl)) {
+    return { error: "The repo link must be an http(s) URL" };
+  }
+
+  await updateTalk(env.DB, talkId, { repoUrl });
+  return { savedRepoFor: talkId, error: null };
 }
 
 /**
@@ -476,11 +509,245 @@ function PendingDecks({
   );
 }
 
+interface RepoLinkItem {
+  id: string;
+  title: string;
+  conferenceName: string;
+  eventDate: string;
+  repoUrl: string | null;
+}
+
+interface RepoSuggestion {
+  fullName: string;
+  url: string;
+  description: string | null;
+  stars: number;
+}
+
+/**
+ * Manages the GitHub link on each talk. The link is admin-only — it never
+ * renders on the public talk page — so this is the one place it's edited in
+ * bulk, with a lookup that guesses the repo from the talk's title.
+ */
+function RepoLinks({
+  items,
+  githubEnabled,
+}: {
+  items: RepoLinkItem[];
+  githubEnabled: boolean;
+}) {
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [suggestions, setSuggestions] = useState<
+    Record<string, RepoSuggestion[]>
+  >({});
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [scanning, setScanning] = useState<{ done: number; total: number } | null>(
+    null,
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [showLinked, setShowLinked] = useState(false);
+
+  const missing = items.filter((item) => !item.repoUrl);
+  const linked = items.filter((item) => item.repoUrl);
+  const shown = showLinked ? items : missing;
+
+  const valueFor = (item: RepoLinkItem) =>
+    drafts[item.id] ?? item.repoUrl ?? "";
+
+  async function lookup(item: RepoLinkItem): Promise<boolean> {
+    const response = await fetch(
+      `/api/repo-suggest?talkId=${encodeURIComponent(item.id)}`,
+    );
+    const body = await response.json<{
+      suggestions?: RepoSuggestion[];
+      error?: string;
+    }>();
+
+    if (!response.ok) {
+      setError(body.error ?? `Lookup failed (${response.status})`);
+      // A rate limit will hit every following talk too, so stop the scan.
+      return response.status !== 429;
+    }
+
+    const found = body.suggestions ?? [];
+    setSuggestions((prev) => ({ ...prev, [item.id]: found }));
+    // One clear winner goes straight into the box; ties are left to choose.
+    if (found.length === 1) {
+      setDrafts((prev) => ({ ...prev, [item.id]: found[0].url }));
+    }
+    return true;
+  }
+
+  async function findOne(item: RepoLinkItem) {
+    setError(null);
+    setBusyId(item.id);
+    try {
+      await lookup(item);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Lookup failed");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function findAll() {
+    setError(null);
+    const targets = missing.filter((item) => !suggestions[item.id]);
+    setScanning({ done: 0, total: targets.length });
+    try {
+      for (const [index, item] of targets.entries()) {
+        // Sequential on purpose: unauthenticated GitHub search allows only a
+        // few requests a minute, and a parallel burst spends them instantly.
+        const keepGoing = await lookup(item);
+        setScanning({ done: index + 1, total: targets.length });
+        if (!keepGoing) break;
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Lookup failed");
+    } finally {
+      setScanning(null);
+    }
+  }
+
+  return (
+    <section className="rounded-lg border border-[var(--border)] p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold">GitHub links</h2>
+          <p className="mt-1 max-w-2xl text-sm text-[var(--muted)]">
+            The repo that goes with each talk — a demo, sample code or the deck
+            source. Admin-only: it isn&rsquo;t shown on the public talk page.
+            {missing.length > 0 && ` ${missing.length} without a link.`}
+          </p>
+        </div>
+        {githubEnabled && missing.length > 0 && (
+          <BusyButton
+            type="button"
+            onClick={findAll}
+            busy={scanning !== null}
+            busyLabel={
+              scanning
+                ? `Searching ${scanning.done}/${scanning.total}…`
+                : "Searching…"
+            }
+            className="rounded border border-[var(--border)] px-3 py-1.5 text-sm hover:border-[var(--muted)]"
+          >
+            Find repos for all {missing.length}
+          </BusyButton>
+        )}
+      </div>
+
+      {!githubEnabled && (
+        <p className="mt-3 text-sm text-[var(--muted)]">
+          Set <code>GITHUB_USERNAME</code> in <code>wrangler.jsonc</code> to
+          look up repos automatically. You can still paste links below.
+        </p>
+      )}
+      {error && (
+        <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">{error}</p>
+      )}
+
+      {items.length === 0 ? (
+        <p className="mt-4 text-sm text-[var(--muted)]">No talks yet.</p>
+      ) : (
+        <ul className="mt-4 divide-y divide-[var(--border)]">
+          {shown.map((item) => (
+            <li key={item.id} className="py-3">
+              <div className="flex flex-wrap items-baseline gap-x-2">
+                <span className="font-medium">{item.title}</span>
+                <span className="text-sm text-[var(--muted)]">
+                  {item.conferenceName} · {formatEventDate(item.eventDate)}
+                </span>
+              </div>
+
+              <Form method="post" className="mt-2 flex flex-wrap gap-2">
+                <input type="hidden" name="intent" value="set-repo" />
+                <input type="hidden" name="talkId" value={item.id} />
+                <input
+                  type="url"
+                  name="repoUrl"
+                  inputMode="url"
+                  placeholder="https://github.com/user/repo"
+                  value={valueFor(item)}
+                  onChange={(e) =>
+                    setDrafts((prev) => ({ ...prev, [item.id]: e.target.value }))
+                  }
+                  className="min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--muted)]"
+                />
+                {githubEnabled && (
+                  <BusyButton
+                    type="button"
+                    onClick={() => findOne(item)}
+                    busy={busyId === item.id}
+                    busyLabel="Searching…"
+                    className="rounded border border-[var(--border)] px-3 py-1.5 text-sm hover:border-[var(--muted)]"
+                  >
+                    Find repo
+                  </BusyButton>
+                )}
+                <button
+                  type="submit"
+                  className="rounded bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-fg)] hover:opacity-90"
+                >
+                  Save
+                </button>
+              </Form>
+
+              {suggestions[item.id]?.length === 0 && (
+                <p className="mt-2 text-sm text-[var(--muted)]">
+                  No matching repo found.
+                </p>
+              )}
+              {(suggestions[item.id]?.length ?? 0) > 1 && (
+                <ul className="mt-2 flex flex-wrap gap-2">
+                  {suggestions[item.id].map((repo) => (
+                    <li key={repo.url}>
+                      <button
+                        type="button"
+                        title={repo.description ?? undefined}
+                        onClick={() =>
+                          setDrafts((prev) => ({ ...prev, [item.id]: repo.url }))
+                        }
+                        className="rounded-full border border-[var(--border)] px-3 py-1 text-xs hover:border-[var(--muted)]"
+                      >
+                        {repo.fullName}
+                        {repo.stars > 0 && (
+                          <span className="text-[var(--muted)]">
+                            {" "}
+                            ★{repo.stars}
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {linked.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowLinked((v) => !v)}
+          className="mt-3 text-sm text-[var(--muted)] underline hover:text-[var(--fg)]"
+        >
+          {showLinked
+            ? "Show only talks without a link"
+            : `Show all ${items.length} talks (${linked.length} already linked)`}
+        </button>
+      )}
+    </section>
+  );
+}
+
 export default function AdminDashboard({
   loaderData,
   actionData,
 }: Route.ComponentProps) {
-  const { talks, sessionize, pendingDecks, notist, lastImport } = loaderData;
+  const { talks, sessionize, pendingDecks, notist, lastImport, repoLinks, githubEnabled } =
+    loaderData;
   const navigation = useNavigation();
   const importingEventId = navigation.formData?.get("eventId");
 
@@ -511,6 +778,8 @@ export default function AdminDashboard({
       {pendingDecks.length > 0 && <PendingDecks pending={pendingDecks} />}
 
       <NotistPanel notist={notist} />
+
+      <RepoLinks items={repoLinks} githubEnabled={githubEnabled} />
 
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Talks</h1>

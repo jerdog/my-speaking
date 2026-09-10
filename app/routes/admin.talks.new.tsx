@@ -21,6 +21,7 @@ export default function NewTalk() {
     eventDate: searchParams.get("eventDate") ?? "",
     abstract: "",
     videoUrl: "",
+    repoUrl: "",
   });
   const [pdf, setPdf] = useState<File | null>(null);
   const [progress, setProgress] = useState<UploadProgress | null>(null);

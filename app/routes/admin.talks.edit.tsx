@@ -89,6 +89,7 @@ export default function EditTalk({
     eventDate: talk.eventDate,
     abstract: talk.abstract ?? "",
     videoUrl: talk.videoUrl ?? "",
+    repoUrl: talk.repoUrl ?? "",
   });
 
   return (

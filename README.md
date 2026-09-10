@@ -37,6 +37,7 @@ follows `prefers-color-scheme`.
 | `/admin/talks/new` | Add a talk and upload slides |
 | `/admin/talks/:id/edit` | Edit metadata, replace slides, delete |
 | `/api/talks*` | Upload endpoints used by the admin UI |
+| `/api/repo-suggest` | Looks up candidate GitHub repos for a talk (admin only) |
 
 ## Migrating from Noti.st
 
@@ -189,6 +190,20 @@ These steps can't be scripted from the repo — do them once, then fill in
 5. **Optional: Sessionize**
 
    Set `SESSIONIZE_SPEAKER_ID` to your Sessionize speaker id.
+
+6. **Optional: GitHub repo links**
+
+   Each talk can carry a link to the repo that goes with it — a demo, sample
+   code, or the deck's source. It is **admin-only**: the "GitHub links" panel
+   on `/admin` manages it, and it is never rendered on, or sent to, the public
+   talk page.
+
+   Set `GITHUB_USERNAME` to have that panel suggest repos from the talk's
+   title, one talk at a time or for every unlinked talk at once. Lookups go to
+   GitHub's unauthenticated search API, which allows roughly ten requests a
+   minute — a bulk scan stops and says so when it hits that, so re-run it after
+   a minute. Leave the variable blank to turn suggestions off and paste links
+   by hand.
 
 ## Storage layout
 

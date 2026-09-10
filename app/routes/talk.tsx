@@ -49,7 +49,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   return {
-    talk,
+    talk: isAdmin ? talk : { ...talk, repoUrl: null },
     isAdmin,
     slideUrls: Array.from({ length: talk.slideCount }, (_, i) =>
       slideUrl(env.SLIDES_CDN_URL, talk.id, talk.slidesVersion, i + 1),

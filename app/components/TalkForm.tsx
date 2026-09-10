@@ -6,6 +6,7 @@ export interface TalkFormValues {
   eventDate: string;
   abstract: string;
   videoUrl: string;
+  repoUrl: string;
 }
 
 interface TalkFormFieldsProps {
@@ -90,15 +91,28 @@ export function TalkFormFields({
         />
       </Field>
 
-      <Field label="Video URL">
-        <input
-          type="url"
-          disabled={disabled}
-          value={values.videoUrl}
-          onChange={(e) => set("videoUrl", e.target.value)}
-          className={inputClass}
-        />
-      </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Video URL">
+          <input
+            type="url"
+            disabled={disabled}
+            value={values.videoUrl}
+            onChange={(e) => set("videoUrl", e.target.value)}
+            className={inputClass}
+          />
+        </Field>
+        <Field label="GitHub URL" hint="Demo repo, sample code or deck source">
+          <input
+            type="url"
+            inputMode="url"
+            placeholder="https://github.com/user/repo"
+            disabled={disabled}
+            value={values.repoUrl}
+            onChange={(e) => set("repoUrl", e.target.value)}
+            className={inputClass}
+          />
+        </Field>
+      </div>
     </div>
   );
 }
@@ -109,10 +123,12 @@ const inputClass =
 function Field({
   label,
   required,
+  hint,
   children,
 }: {
   label: string;
   required?: boolean;
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -122,6 +138,9 @@ function Field({
         {required && <span className="text-[var(--muted)]"> *</span>}
       </span>
       {children}
+      {hint && (
+        <span className="mt-1 block text-xs text-[var(--muted)]">{hint}</span>
+      )}
     </label>
   );
 }
